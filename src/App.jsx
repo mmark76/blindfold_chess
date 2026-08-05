@@ -4,20 +4,36 @@ import { sanFromSpeech } from "./voice/sanFromSpeech.js";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const STOCKFISH_WORKER_URL = "/stockfish-17.1-lite-single-03e3232.js";
+const MATE_SCORE = 100000;
+
+const DIFFICULTY_LEVELS = [
+  { id: 1, name: "Αρχάριος", skill: 0, depth: 5, nodes: 800, multiPv: 8, maxLoss: 500, bestChance: 0.2, temperature: 500 },
+  { id: 2, name: "Πολύ εύκολο", skill: 2, depth: 6, nodes: 1500, multiPv: 8, maxLoss: 400, bestChance: 0.3, temperature: 420 },
+  { id: 3, name: "Εύκολο", skill: 4, depth: 7, nodes: 3000, multiPv: 8, maxLoss: 300, bestChance: 0.4, temperature: 340 },
+  { id: 4, name: "Χαλαρό", skill: 6, depth: 8, nodes: 6000, multiPv: 7, maxLoss: 220, bestChance: 0.5, temperature: 260 },
+  { id: 5, name: "Μέτριο", skill: 8, depth: 9, nodes: 12000, multiPv: 6, maxLoss: 160, bestChance: 0.62, temperature: 190 },
+  { id: 6, name: "Προχωρημένο", skill: 10, depth: 10, nodes: 25000, multiPv: 5, maxLoss: 120, bestChance: 0.72, temperature: 140 },
+  { id: 7, name: "Δύσκολο", skill: 12, depth: 11, nodes: 50000, multiPv: 4, maxLoss: 80, bestChance: 0.82, temperature: 100 },
+  { id: 8, name: "Πολύ δύσκολο", skill: 15, depth: 13, nodes: 100000, multiPv: 3, maxLoss: 50, bestChance: 0.9, temperature: 70 },
+  { id: 9, name: "Ειδικός", skill: 18, depth: 15, nodes: 200000, multiPv: 2, maxLoss: 25, bestChance: 0.96, temperature: 35 },
+  { id: 10, name: "Μέγιστο", skill: 20, depth: 18, nodes: 400000, multiPv: 1, maxLoss: 0, bestChance: 1, temperature: 1 },
+];
 
 function speak(text) {
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-US";
+  if (!("speechSynthesis" in window)) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
   window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
+  window.speechSynthesis.speak(utterance);
 }
 
 function uciToMove(uci) {
   if (!uci || uci === "(none)") return null;
-  const from = uci.slice(0, 2);
-  const to = uci.slice(2, 4);
-  const promotion = uci.length >= 5 ? uci[4] : undefined;
-  return { from, to, promotion };
+  return {
+    from: uci.slice(0, 2),
+    to: uci.slice(2, 4),
+    promotion: uci.length >= 5 ? uci[4] : undefined,
+  };
 }
 
 function formatMovesSan(moves) {
@@ -33,22 +49,107 @@ function formatMovesSan(moves) {
 }
 
 function interpretConfirmCommand(raw) {
-  const t = (raw || "").toLowerCase();
-
+  const text = (raw || "").toLowerCase();
   const yes = ["confirm", "yes", "yeah", "yep", "ok", "okay", "go", "do it", "accept"];
   const no = ["cancel", "no", "nope", "stop", "reject", "discard"];
-  const rep = ["repeat", "say again", "again", "what", "pardon"];
+  const repeat = ["repeat", "say again", "again", "what", "pardon"];
 
-  if (yes.some((w) => t.includes(w))) return "CONFIRM";
-  if (no.some((w) => t.includes(w))) return "CANCEL";
-  if (rep.some((w) => t.includes(w))) return "REPEAT";
+  if (yes.some((word) => text.includes(word))) return "CONFIRM";
+  if (no.some((word) => text.includes(word))) return "CANCEL";
+  if (repeat.some((word) => text.includes(word))) return "REPEAT";
   return "UNKNOWN";
+}
+
+function parseEngineInfo(line) {
+  if (!line.startsWith("info ") || !line.includes(" pv ") || !line.includes(" score ")) return null;
+
+  const tokens = line.trim().split(/\s+/);
+  const depthIndex = tokens.indexOf("depth");
+  const multiPvIndex = tokens.indexOf("multipv");
+  const scoreIndex = tokens.indexOf("score");
+  const pvIndex = tokens.indexOf("pv");
+
+  if (scoreIndex < 0 || pvIndex < 0 || !tokens[pvIndex + 1]) return null;
+
+  const depth = depthIndex >= 0 ? Number(tokens[depthIndex + 1]) || 0 : 0;
+  const multiPv = multiPvIndex >= 0 ? Number(tokens[multiPvIndex + 1]) || 1 : 1;
+  const scoreType = tokens[scoreIndex + 1];
+  const rawScore = Number(tokens[scoreIndex + 2]);
+
+  if (!Number.isFinite(rawScore)) return null;
+
+  let score;
+  if (scoreType === "cp") {
+    score = rawScore;
+  } else if (scoreType === "mate") {
+    const sign = rawScore >= 0 ? 1 : -1;
+    score = sign * (MATE_SCORE - Math.min(Math.abs(rawScore), 999) * 100);
+  } else {
+    return null;
+  }
+
+  return {
+    depth,
+    multiPv,
+    score,
+    isMate: scoreType === "mate",
+    uci: tokens[pvIndex + 1],
+  };
+}
+
+function weightedChoice(items, weights) {
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) return items[0];
+
+  let target = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    target -= weights[i];
+    if (target <= 0) return items[i];
+  }
+  return items[items.length - 1];
+}
+
+function chooseEngineMove(candidates, profile, fallbackUci) {
+  const unique = new Map();
+  candidates
+    .sort((a, b) => a.multiPv - b.multiPv)
+    .forEach((candidate) => {
+      if (!unique.has(candidate.uci)) unique.set(candidate.uci, candidate);
+    });
+
+  const ranked = [...unique.values()];
+  if (ranked.length === 0) return fallbackUci;
+
+  const best = ranked[0];
+  if (profile.id === 10 || ranked.length === 1) return best.uci;
+
+  // At the stronger levels, never deliberately ignore a forced mating line.
+  if (profile.id >= 7 && best.isMate && best.score > 0) return best.uci;
+
+  const eligible = ranked.filter((candidate, index) => {
+    if (index === 0) return true;
+    return Math.max(0, best.score - candidate.score) <= profile.maxLoss;
+  });
+
+  if (eligible.length === 1 || Math.random() < profile.bestChance) return best.uci;
+
+  const alternatives = eligible.slice(1);
+  const weights = alternatives.map((candidate, index) => {
+    const loss = Math.max(0, best.score - candidate.score);
+    const qualityWeight = Math.exp(-loss / profile.temperature);
+    const rankWeight = 1 / Math.sqrt(index + 1);
+    return qualityWeight * rankWeight;
+  });
+
+  return weightedChoice(alternatives, weights)?.uci || best.uci;
 }
 
 export default function App() {
   const chessRef = useRef(new Chess());
   const engineRef = useRef(null);
   const recogRef = useRef(null);
+  const difficultyRef = useRef(5);
+  const engineSearchRef = useRef({ profile: DIFFICULTY_LEVELS[4], candidates: new Map() });
 
   const [moves, setMoves] = useState([]);
   const [status, setStatus] = useState("Enter a SAN move or press Start for voice input.");
@@ -57,60 +158,96 @@ export default function App() {
   const [typedSan, setTypedSan] = useState("");
   const [mode, setMode] = useState("MOVE");
   const [pendingSan, setPendingSan] = useState("");
+  const [difficulty, setDifficulty] = useState(5);
+  const [gameStarted, setGameStarted] = useState(false);
 
   const speechSupported = Boolean(SpeechRecognition);
+  const selectedProfile = DIFFICULTY_LEVELS.find((level) => level.id === difficulty) || DIFFICULTY_LEVELS[4];
 
   useEffect(() => {
     if (!speechSupported) {
       setStatus("Voice input is unavailable. Enter a SAN move below.");
     }
 
-    const w = new Worker(STOCKFISH_WORKER_URL);
-    engineRef.current = w;
+    const worker = new Worker(STOCKFISH_WORKER_URL);
+    engineRef.current = worker;
 
-    w.onmessage = (e) => {
-      const line = typeof e.data === "string" ? e.data : "";
-      if (!line || line.includes("uciok")) return;
+    worker.onmessage = (event) => {
+      const text = typeof event.data === "string" ? event.data : "";
+      if (!text) return;
 
-      if (line.startsWith("bestmove")) {
-        const parts = line.trim().split(/\s+/);
-        const uci = parts[1] || "(none)";
-        const chess = chessRef.current;
-        const moveObj = uciToMove(uci);
-
-        if (!moveObj) {
-          setBusy(false);
-          setStatus("Engine has no moves.");
-          speak("I have no moves.");
-          return;
-        }
-
-        const m = chess.move(moveObj);
-        if (m) {
-          setMoves((prev) => [...prev, m.san]);
-          setStatus(`My move: ${m.san}. Enter your move or press Start.`);
-          speak(`My move: ${m.san}. Your move.`);
-        }
-
-        setBusy(false);
-
-        if (chess.isCheckmate()) {
-          setStatus("Checkmate.");
-          speak("Checkmate.");
-          return;
-        }
-        if (chess.isDraw()) {
-          setStatus("Draw.");
-          speak("Draw.");
-        }
+      for (const rawLine of text.split(/\r?\n/)) {
+        handleEngineLine(rawLine.trim());
       }
     };
 
-    w.postMessage("uci");
-    w.postMessage("isready");
+    worker.postMessage("uci");
+    worker.postMessage("isready");
 
-    return () => w.terminate();
+    return () => worker.terminate();
   }, [speechSupported]);
+
+  function handleEngineLine(line) {
+    if (!line || line.includes("uciok")) return;
+
+    const info = parseEngineInfo(line);
+    if (info) {
+      const candidates = engineSearchRef.current.candidates;
+      const previous = candidates.get(info.multiPv);
+      if (!previous || info.depth >= previous.depth) {
+        candidates.set(info.multiPv, info);
+      }
+      return;
+    }
+
+    if (!line.startsWith("bestmove")) return;
+
+    const parts = line.split(/\s+/);
+    const fallbackUci = parts[1] || "(none)";
+    const search = engineSearchRef.current;
+    const selectedUci = chooseEngineMove([...search.candidates.values()], search.profile, fallbackUci);
+    finishEngineMove(selectedUci, fallbackUci);
+  }
+
+  function finishEngineMove(selectedUci, fallbackUci) {
+    const chess = chessRef.current;
+    const attempts = [selectedUci, fallbackUci].filter((uci, index, all) => uci && all.indexOf(uci) === index);
+    let move = null;
+
+    for (const uci of attempts) {
+      const moveObject = uciToMove(uci);
+      if (!moveObject) continue;
+      try {
+        move = chess.move(moveObject);
+      } catch {
+        move = null;
+      }
+      if (move) break;
+    }
+
+    engineSearchRef.current.candidates.clear();
+    setBusy(false);
+
+    if (!move) {
+      setStatus("Engine has no legal move.");
+      speak("I have no legal move.");
+      return;
+    }
+
+    setMoves((previous) => [...previous, move.san]);
+    setStatus(`My move: ${move.san}. Enter your move or press Start.`);
+    speak(`My move: ${move.san}. Your move.`);
+
+    if (chess.isCheckmate()) {
+      setStatus("Checkmate.");
+      speak("Checkmate.");
+      return;
+    }
+    if (chess.isDraw()) {
+      setStatus("Draw.");
+      speak("Draw.");
+    }
+  }
 
   function stopListening() {
     try {
@@ -127,34 +264,46 @@ export default function App() {
 
     stopListening();
 
-    const r = new SpeechRecognition();
-    recogRef.current = r;
-    r.lang = "en-US";
-    r.interimResults = false;
-    r.maxAlternatives = 1;
+    const recognition = new SpeechRecognition();
+    recogRef.current = recognition;
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
 
-    r.onstart = () => setListening(true);
-    r.onresult = (ev) => {
-      const raw = ev.results?.[0]?.[0]?.transcript || "";
+    recognition.onstart = () => setListening(true);
+    recognition.onresult = (event) => {
+      const raw = event.results?.[0]?.[0]?.transcript || "";
       onResult(raw);
     };
-    r.onerror = () => {
+    recognition.onerror = () => {
       setListening(false);
       setStatus("Speech error. Enter the move below or press Start to try again.");
       setMode("MOVE");
       setPendingSan("");
     };
-    r.onend = () => setListening(false);
-    r.start();
+    recognition.onend = () => setListening(false);
+    recognition.start();
   }
 
   function requestEngineMove() {
-    const chess = chessRef.current;
-    setBusy(true);
-    setStatus("Engine thinking...");
+    const engine = engineRef.current;
+    if (!engine) {
+      setStatus("Engine is not ready. Please try again.");
+      return;
+    }
 
-    engineRef.current?.postMessage(`position fen ${chess.fen()}`);
-    engineRef.current?.postMessage("go depth 8");
+    const profile = DIFFICULTY_LEVELS.find((level) => level.id === difficultyRef.current) || DIFFICULTY_LEVELS[4];
+    engineSearchRef.current = { profile, candidates: new Map() };
+
+    setBusy(true);
+    setStatus(`Engine thinking — level ${profile.id}: ${profile.name}...`);
+
+    engine.postMessage("stop");
+    engine.postMessage("setoption name UCI_LimitStrength value false");
+    engine.postMessage(`setoption name Skill Level value ${profile.skill}`);
+    engine.postMessage(`setoption name MultiPV value ${profile.multiPv}`);
+    engine.postMessage(`position fen ${chessRef.current.fen()}`);
+    engine.postMessage(`go depth ${profile.depth} nodes ${profile.nodes}`);
   }
 
   function applyPlayerSan(rawSan, source = "keyboard") {
@@ -167,9 +316,14 @@ export default function App() {
     }
 
     const chess = chessRef.current;
-    const m = chess.move(san, { sloppy: true });
+    let move = null;
+    try {
+      move = chess.move(san, { sloppy: true });
+    } catch {
+      move = null;
+    }
 
-    if (!m) {
+    if (!move) {
       setMode("MOVE");
       setPendingSan("");
       setStatus("Illegal move. Enter SAN such as e4, Nf3 or O-O.");
@@ -179,7 +333,8 @@ export default function App() {
 
     stopListening();
     setTypedSan("");
-    setMoves((prev) => [...prev, m.san]);
+    setGameStarted(true);
+    setMoves((previous) => [...previous, move.san]);
 
     if (chess.isCheckmate()) {
       setStatus("Checkmate.");
@@ -194,8 +349,8 @@ export default function App() {
 
     setMode("MOVE");
     setPendingSan("");
-    setStatus(`You played: ${m.san}. Engine thinking...`);
-    speak(`You played: ${m.san}.`);
+    setStatus(`You played: ${move.san}. Engine thinking...`);
+    speak(`You played: ${move.san}.`);
     requestEngineMove();
   }
 
@@ -233,14 +388,14 @@ export default function App() {
 
     setStatus(`Confirm: ${sanToConfirm}. Say confirm or cancel.`);
     startListeningInternal((raw) => {
-      const cmd = interpretConfirmCommand(raw);
+      const command = interpretConfirmCommand(raw);
 
-      if (cmd === "CONFIRM") {
+      if (command === "CONFIRM") {
         applyPlayerSan(sanToConfirm, "voice");
         return;
       }
 
-      if (cmd === "CANCEL") {
+      if (command === "CANCEL") {
         stopListening();
         setMode("MOVE");
         setPendingSan("");
@@ -249,7 +404,7 @@ export default function App() {
         return;
       }
 
-      if (cmd === "REPEAT") {
+      if (command === "REPEAT") {
         speak(`I heard ${sanToConfirm}. Confirm or cancel.`);
         startListeningForConfirm(sanToConfirm);
         return;
@@ -269,21 +424,58 @@ export default function App() {
     });
   }
 
+  function changeDifficulty(event) {
+    const nextDifficulty = Number(event.target.value);
+    difficultyRef.current = nextDifficulty;
+    setDifficulty(nextDifficulty);
+    const profile = DIFFICULTY_LEVELS.find((level) => level.id === nextDifficulty);
+    if (profile) setStatus(`Selected level ${profile.id}: ${profile.name}.`);
+  }
+
   function newGame() {
     stopListening();
+    engineRef.current?.postMessage("stop");
+    engineRef.current?.postMessage("ucinewgame");
+    engineRef.current?.postMessage("isready");
+    engineSearchRef.current.candidates.clear();
+
     chessRef.current = new Chess();
     setMoves([]);
     setTypedSan("");
     setBusy(false);
+    setGameStarted(false);
     setMode("MOVE");
     setPendingSan("");
-    setStatus("New game. Enter a SAN move or press Start for voice input.");
+    setStatus(`New game — level ${selectedProfile.id}: ${selectedProfile.name}. Enter a SAN move or press Start.`);
     speak("New game. Your move.");
   }
 
   return (
     <div style={{ maxWidth: 760, margin: "24px auto", padding: 16, fontFamily: "system-ui" }}>
       <h2 style={{ marginBottom: 8 }}>Play Blindfold Chess (Voice or Keyboard)</h2>
+
+      <div style={{ marginBottom: 12 }}>
+        <label htmlFor="difficulty" style={{ display: "block", fontWeight: 700, marginBottom: 6 }}>
+          Δυσκολία Stockfish
+        </label>
+        <select
+          id="difficulty"
+          value={difficulty}
+          onChange={changeDifficulty}
+          disabled={gameStarted || busy}
+          style={{ width: "100%", padding: "10px 12px", fontSize: 16, border: "1px solid #bbb", borderRadius: 8 }}
+        >
+          {DIFFICULTY_LEVELS.map((level) => (
+            <option key={level.id} value={level.id}>
+              {level.id}. {level.name}
+            </option>
+          ))}
+        </select>
+        <div style={{ marginTop: 5, fontSize: 13, color: "#555" }}>
+          Skill {selectedProfile.skill}/20 · βάθος έως {selectedProfile.depth} · {selectedProfile.nodes.toLocaleString("el-GR")} κόμβοι
+          {gameStarted ? " · Κλειδωμένο για αυτή την παρτίδα" : ""}
+        </div>
+      </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         <button onClick={newGame} disabled={busy}>New game</button>
