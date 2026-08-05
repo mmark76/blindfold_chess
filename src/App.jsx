@@ -3,8 +3,6 @@ import { Chess } from "chess.js";
 import { sanFromSpeech } from "./voice/sanFromSpeech.js";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-// Must match the filename you place in /public
 const STOCKFISH_WORKER_URL = "/stockfish-17.1-lite-single-03e3232.js";
 
 function speak(text) {
@@ -53,32 +51,30 @@ export default function App() {
   const recogRef = useRef(null);
 
   const [moves, setMoves] = useState([]);
-  const [status, setStatus] = useState("Say your move (SAN).");
+  const [status, setStatus] = useState("Enter a SAN move or press Start for voice input.");
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
-
-  const [mode, setMode] = useState("MOVE"); // MOVE | CONFIRM
+  const [typedSan, setTypedSan] = useState("");
+  const [mode, setMode] = useState("MOVE");
   const [pendingSan, setPendingSan] = useState("");
 
+  const speechSupported = Boolean(SpeechRecognition);
+
   useEffect(() => {
-    if (!SpeechRecognition) {
-      setStatus("SpeechRecognition is not supported in this browser.");
-      return;
+    if (!speechSupported) {
+      setStatus("Voice input is unavailable. Enter a SAN move below.");
     }
 
-    // Create Stockfish as a worker directly (most robust)
     const w = new Worker(STOCKFISH_WORKER_URL);
     engineRef.current = w;
 
     w.onmessage = (e) => {
       const line = typeof e.data === "string" ? e.data : "";
-      if (!line) return;
+      if (!line || line.includes("uciok")) return;
 
-      if (line.includes("uciok")) return;
       if (line.startsWith("bestmove")) {
         const parts = line.trim().split(/\s+/);
         const uci = parts[1] || "(none)";
-
         const chess = chessRef.current;
         const moveObj = uciToMove(uci);
 
@@ -86,14 +82,13 @@ export default function App() {
           setBusy(false);
           setStatus("Engine has no moves.");
           speak("I have no moves.");
-          startListeningForMove();
           return;
         }
 
         const m = chess.move(moveObj);
         if (m) {
           setMoves((prev) => [...prev, m.san]);
-          setStatus(`My move: ${m.san}. Your move.`);
+          setStatus(`My move: ${m.san}. Enter your move or press Start.`);
           speak(`My move: ${m.san}. Your move.`);
         }
 
@@ -107,20 +102,15 @@ export default function App() {
         if (chess.isDraw()) {
           setStatus("Draw.");
           speak("Draw.");
-          return;
         }
-
-        startListeningForMove();
       }
     };
 
-    // Init UCI
     w.postMessage("uci");
     w.postMessage("isready");
 
     return () => w.terminate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [speechSupported]);
 
   function stopListening() {
     try {
@@ -130,34 +120,31 @@ export default function App() {
   }
 
   function startListeningInternal(onResult) {
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognition) {
+      setStatus("Voice input is unavailable. Enter a SAN move below.");
+      return;
+    }
 
     stopListening();
 
     const r = new SpeechRecognition();
     recogRef.current = r;
-
     r.lang = "en-US";
     r.interimResults = false;
     r.maxAlternatives = 1;
 
     r.onstart = () => setListening(true);
-
     r.onresult = (ev) => {
       const raw = ev.results?.[0]?.[0]?.transcript || "";
       onResult(raw);
     };
-
     r.onerror = () => {
       setListening(false);
-      setStatus("Speech error. Click Start.");
-      speak("Speech error. Please click Start.");
+      setStatus("Speech error. Enter the move below or press Start to try again.");
       setMode("MOVE");
       setPendingSan("");
     };
-
     r.onend = () => setListening(false);
-
     r.start();
   }
 
@@ -166,15 +153,18 @@ export default function App() {
     setBusy(true);
     setStatus("Engine thinking...");
 
-    const fen = chess.fen();
-
-    // UCI commands to Stockfish worker
-    engineRef.current?.postMessage(`position fen ${fen}`);
+    engineRef.current?.postMessage(`position fen ${chess.fen()}`);
     engineRef.current?.postMessage("go depth 8");
   }
 
-  function applyPlayerSan(san) {
+  function applyPlayerSan(rawSan, source = "keyboard") {
     if (busy) return;
+
+    const san = (rawSan || "").trim();
+    if (!san) {
+      setStatus("Enter a move in SAN, for example e4, Nf3 or O-O.");
+      return;
+    }
 
     const chess = chessRef.current;
     const m = chess.move(san, { sloppy: true });
@@ -182,12 +172,13 @@ export default function App() {
     if (!m) {
       setMode("MOVE");
       setPendingSan("");
-      setStatus("Illegal move. Say a SAN move like: e4, Nf3, O-O.");
-      speak("Illegal move. Please try again.");
-      startListeningForMove();
+      setStatus("Illegal move. Enter SAN such as e4, Nf3 or O-O.");
+      if (source === "voice") speak("Illegal move. Please try again.");
       return;
     }
 
+    stopListening();
+    setTypedSan("");
     setMoves((prev) => [...prev, m.san]);
 
     if (chess.isCheckmate()) {
@@ -205,8 +196,12 @@ export default function App() {
     setPendingSan("");
     setStatus(`You played: ${m.san}. Engine thinking...`);
     speak(`You played: ${m.san}.`);
-
     requestEngineMove();
+  }
+
+  function submitTypedMove(event) {
+    event.preventDefault();
+    applyPlayerSan(typedSan, "keyboard");
   }
 
   function startListeningForMove() {
@@ -215,13 +210,13 @@ export default function App() {
     setMode("MOVE");
     setPendingSan("");
     setStatus("Listening... Say your move.");
+
     startListeningInternal((raw) => {
       const san = sanFromSpeech(raw);
 
       if (!san) {
-        setStatus(`Heard: "${raw}" → (empty). Try again.`);
-        speak("I did not catch that. Please repeat.");
-        startListeningForMove();
+        setStatus(`Heard: "${raw}". Enter the move below or press Start to try again.`);
+        speak("I did not catch that. Please try again.");
         return;
       }
 
@@ -229,20 +224,19 @@ export default function App() {
       setPendingSan(san);
       setStatus(`Heard: "${raw}" → ${san}. Say confirm or cancel.`);
       speak(`I heard ${san}. Confirm or cancel.`);
-      startListeningForConfirm();
+      startListeningForConfirm(san);
     });
   }
 
-  function startListeningForConfirm() {
+  function startListeningForConfirm(sanToConfirm) {
     if (busy) return;
 
-    setStatus(`Confirm: ${pendingSan}. Say confirm or cancel.`);
+    setStatus(`Confirm: ${sanToConfirm}. Say confirm or cancel.`);
     startListeningInternal((raw) => {
       const cmd = interpretConfirmCommand(raw);
 
       if (cmd === "CONFIRM") {
-        stopListening();
-        applyPlayerSan(pendingSan);
+        applyPlayerSan(sanToConfirm, "voice");
         return;
       }
 
@@ -250,30 +244,28 @@ export default function App() {
         stopListening();
         setMode("MOVE");
         setPendingSan("");
-        setStatus("Canceled. Say your move.");
-        speak("Canceled. Say your move.");
-        startListeningForMove();
+        setStatus("Canceled. Enter a move or press Start.");
+        speak("Canceled.");
         return;
       }
 
       if (cmd === "REPEAT") {
-        speak(`I heard ${pendingSan}. Confirm or cancel.`);
-        startListeningForConfirm();
+        speak(`I heard ${sanToConfirm}. Confirm or cancel.`);
+        startListeningForConfirm(sanToConfirm);
         return;
       }
 
-      // If user says another move, treat as new pending move
       const maybeSan = sanFromSpeech(raw);
       if (maybeSan) {
         setPendingSan(maybeSan);
         setStatus(`Heard a new move: ${maybeSan}. Say confirm or cancel.`);
         speak(`I heard ${maybeSan}. Confirm or cancel.`);
-        startListeningForConfirm();
+        startListeningForConfirm(maybeSan);
         return;
       }
 
+      setStatus(`Could not confirm ${sanToConfirm}. Enter the move below or press Start.`);
       speak("Please say confirm or cancel.");
-      startListeningForConfirm();
     });
   }
 
@@ -281,23 +273,39 @@ export default function App() {
     stopListening();
     chessRef.current = new Chess();
     setMoves([]);
+    setTypedSan("");
     setBusy(false);
     setMode("MOVE");
     setPendingSan("");
-    setStatus("New game. Say your move.");
+    setStatus("New game. Enter a SAN move or press Start for voice input.");
     speak("New game. Your move.");
-    startListeningForMove();
   }
 
   return (
     <div style={{ maxWidth: 760, margin: "24px auto", padding: 16, fontFamily: "system-ui" }}>
-      <h2 style={{ marginBottom: 8 }}>Play Blindfold Chess (Voice + Confirm)</h2>
+      <h2 style={{ marginBottom: 8 }}>Play Blindfold Chess (Voice or Keyboard)</h2>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         <button onClick={newGame} disabled={busy}>New game</button>
-        <button onClick={startListeningForMove} disabled={busy || listening}>Start</button>
+        <button onClick={startListeningForMove} disabled={busy || listening || !speechSupported}>Start voice</button>
         <button onClick={stopListening} disabled={!listening}>Stop</button>
       </div>
+
+      <form onSubmit={submitTypedMove} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input
+          type="text"
+          value={typedSan}
+          onChange={(event) => setTypedSan(event.target.value)}
+          placeholder="Enter SAN: e4, Nf3, Bxe6, O-O"
+          aria-label="Enter chess move in SAN"
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck="false"
+          disabled={busy}
+          style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 16, border: "1px solid #bbb", borderRadius: 8 }}
+        />
+        <button type="submit" disabled={busy || !typedSan.trim()}>Play move</button>
+      </form>
 
       <div style={{ padding: 12, border: "1px solid #ccc", borderRadius: 10, minHeight: 140 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Moves (SAN)</div>
