@@ -211,16 +211,31 @@ html[data-ui-board-size="small"] .chessboard { width: min(100%, 360px); }
 html[data-ui-board-size="medium"] .chessboard { width: min(100%, 500px); }
 html[data-ui-board-size="large"] .chessboard { width: min(100%, 640px); }
 
-.settings-panel-host {
-  margin-top: 1rem;
-  scroll-margin-top: 10rem;
+.settings-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(15 23 42 / 0.62);
+  backdrop-filter: blur(5px);
 }
 
-.settings-panel {
-  padding: 1rem;
+.settings-dialog {
+  width: min(720px, 100%);
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  padding: clamp(1rem, 3vw, 1.5rem);
   border: 1px solid var(--border);
-  border-radius: 0.9rem;
-  background: var(--panel-background);
+  border-radius: 1rem;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 28px 80px rgb(0 0 0 / 0.34);
+}
+
+.settings-dialog:focus {
+  outline: none;
 }
 
 .settings-heading {
@@ -230,7 +245,7 @@ html[data-ui-board-size="large"] .chessboard { width: min(100%, 640px); }
   gap: 1rem;
 }
 
-.settings-heading h3 {
+.settings-heading h2 {
   margin: 0;
 }
 
@@ -239,17 +254,23 @@ html[data-ui-board-size="large"] .chessboard { width: min(100%, 640px); }
   color: var(--ink-soft);
 }
 
-.settings-heading button {
-  min-height: 38px;
-  padding: 0.5rem 0.75rem;
-  white-space: nowrap;
+.settings-heading > button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.85rem;
-  margin-top: 1rem;
+  margin-top: 1.15rem;
 }
 
 .settings-field {
@@ -267,26 +288,59 @@ html[data-ui-board-size="large"] .chessboard { width: min(100%, 640px); }
 }
 
 .settings-storage-note {
-  margin: 0.8rem 0 0;
+  margin: 0.9rem 0 0;
   color: var(--muted);
   font-size: 0.82rem;
 }
 
+.settings-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 1.2rem;
+}
+
 @media (max-width: 760px) {
-  .settings-panel-host {
-    scroll-margin-top: 18rem;
+  .settings-modal-backdrop {
+    align-items: end;
+    padding: 0;
   }
 
-  .settings-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .settings-heading button {
+  .settings-dialog {
     width: 100%;
+    max-height: 90vh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 1rem 1rem 0 0;
   }
 
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .settings-dialog-actions button {
+    flex: 1 1 10rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .settings-modal-backdrop {
+    animation: settings-backdrop-in 150ms ease-out;
+  }
+
+  .settings-dialog {
+    animation: settings-dialog-in 180ms ease-out;
+  }
+
+  @keyframes settings-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes settings-dialog-in {
+    from { opacity: 0; transform: translateY(0.6rem) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
   }
 }
