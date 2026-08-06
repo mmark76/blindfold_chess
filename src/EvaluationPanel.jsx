@@ -266,6 +266,9 @@ export default function EvaluationPanel() {
     ? isGreek ? "Απόκρυψη αξιολόγησης" : "Hide evaluation"
     : isGreek ? "Εμφάνιση αξιολόγησης" : "Show evaluation";
   const heading = isGreek ? "Αξιολόγηση Stockfish" : "Stockfish evaluation";
+  const engineVersion = isGreek
+    ? "Μηχανή: Stockfish 17.1 Lite · μονό νήμα"
+    : "Engine: Stockfish 17.1 Lite · single-thread";
   const emptyText = isGreek
     ? "Παίξε μία κίνηση για να εμφανιστεί αξιολόγηση."
     : "Play a move to see an evaluation.";
@@ -275,7 +278,10 @@ export default function EvaluationPanel() {
   return createPortal(
     <div className="evaluation-panel">
       <div className="evaluation-toolbar">
-        <strong>{heading}</strong>
+        <div className="evaluation-title">
+          <strong>{heading}</strong>
+          <small>{engineVersion}</small>
+        </div>
         <button
           aria-controls="stockfish-evaluation-lines"
           aria-expanded={showEvaluation}
