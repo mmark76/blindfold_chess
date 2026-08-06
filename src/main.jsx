@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import BoardVisibilityToggle from "./BoardVisibilityToggle.jsx";
 import ConfirmMoveButton from "./ConfirmMoveButton.jsx";
+import EvaluationPanel from "./EvaluationPanel.jsx";
 import MovesVisibilityToggle from "./MovesVisibilityToggle.jsx";
 import "./styles.css";
 
@@ -13,6 +14,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <ConfirmMoveButton />
       <MovesVisibilityToggle />
       <BoardVisibilityToggle />
+      <EvaluationPanel />
     </>
   </React.StrictMode>
 );
