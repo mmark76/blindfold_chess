@@ -5,6 +5,7 @@ import BoardVisibilityToggle from "./BoardVisibilityToggle.jsx";
 import ConfirmMoveButton from "./ConfirmMoveButton.jsx";
 import EvaluationPanel from "./EvaluationPanel.jsx";
 import MovesVisibilityToggle from "./MovesVisibilityToggle.jsx";
+import SettingsPanel from "./SettingsPanel.jsx";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -15,6 +16,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <MovesVisibilityToggle />
       <BoardVisibilityToggle />
       <EvaluationPanel />
+      <SettingsPanel />
     </>
   </React.StrictMode>
 );
