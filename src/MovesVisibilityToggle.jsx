@@ -58,13 +58,7 @@ function cyprusDateParts() {
   );
 }
 
-function createPgn(sanText) {
-  const moves = sanMovesFromText(sanText);
-  if (moves.length === 0) return null;
-
-  const chess = gameFromSanText(sanText);
-  const result = gameResult(chess);
-  const date = cyprusDateParts();
+function moveLinesFromMoves(moves) {
   const moveLines = [];
 
   for (let index = 0; index < moves.length; index += 2) {
@@ -74,6 +68,17 @@ function createPgn(sanText) {
     moveLines.push(`${moveNumber}. ${whiteMove}${blackMove ? ` ${blackMove}` : ""}`);
   }
 
+  return moveLines;
+}
+
+function createPgn(sanText) {
+  const moves = sanMovesFromText(sanText);
+  if (moves.length === 0) return null;
+
+  const chess = gameFromSanText(sanText);
+  const result = gameResult(chess);
+  const date = cyprusDateParts();
+  const moveLines = moveLinesFromMoves(moves);
   const headers = [
     '[Event "Blindfold Chess"]',
     '[Site "https://blindfoldchess.markellosecosystem.com/"]',
@@ -103,6 +108,119 @@ function downloadPgn(sanText) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function openPrintableGame(sanText, language, autoPrint = false) {
+  const moves = sanMovesFromText(sanText);
+  if (moves.length === 0) return;
+
+  const chess = gameFromSanText(sanText);
+  const result = gameResult(chess);
+  const date = cyprusDateParts();
+  const isGreek = language === "el";
+  const labels = isGreek
+    ? {
+        title: "Blindfold Chess — Παρτίδα",
+        date: "Ημερομηνία",
+        white: "Λευκά",
+        black: "Μαύρα",
+        result: "Αποτέλεσμα",
+        moves: "Κινήσεις (SAN)",
+        finalFen: "Τελικό FEN",
+        player: "Παίκτης",
+        stockfish: "Stockfish",
+        print: "Εκτύπωση",
+        close: "Κλείσιμο",
+      }
+    : {
+        title: "Blindfold Chess — Game",
+        date: "Date",
+        white: "White",
+        black: "Black",
+        result: "Result",
+        moves: "Moves (SAN)",
+        finalFen: "Final FEN",
+        player: "Player",
+        stockfish: "Stockfish",
+        print: "Print",
+        close: "Close",
+      };
+  const moveLines = moveLinesFromMoves(moves);
+  const printableWindow = window.open("", "_blank");
+
+  if (!printableWindow) return;
+  printableWindow.opener = null;
+
+  const formattedDate = `${date.year}-${date.month}-${date.day} ${date.hour}:${date.minute}`;
+  const moveMarkup = moveLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("");
+
+  printableWindow.document.open();
+  printableWindow.document.write(`<!doctype html>
+<html lang="${isGreek ? "el" : "en"}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(labels.title)}</title>
+  <style>
+    :root { font-family: Georgia, "Times New Roman", serif; color: #201b16; background: #f5efe5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 2rem; }
+    main { width: min(760px, 100%); margin: 0 auto; background: #fff; border: 1px solid #cdbb9f; border-radius: 14px; padding: 2rem; }
+    h1 { margin: 0 0 1.5rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+    h2 { margin-top: 2rem; font-size: 1.15rem; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.5rem 1rem; margin: 0; }
+    dt { font-weight: 700; }
+    dd { margin: 0; }
+    ol { columns: 2; column-gap: 2.5rem; padding-left: 1.5rem; }
+    li { break-inside: avoid; margin-bottom: 0.35rem; }
+    code { display: block; overflow-wrap: anywhere; padding: 0.8rem; background: #f3eee6; border-radius: 8px; }
+    .actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-bottom: 1.5rem; }
+    button { min-height: 40px; padding: 0.55rem 0.9rem; border: 1px solid #8b6b3f; border-radius: 8px; background: #fff; font: inherit; cursor: pointer; }
+    button:first-child { background: #8b6b3f; color: #fff; }
+    @media (max-width: 560px) { body { padding: 0.75rem; } main { padding: 1.15rem; } ol { columns: 1; } }
+    @media print {
+      :root { background: #fff; }
+      body { padding: 0; }
+      main { width: 100%; border: 0; border-radius: 0; padding: 0; }
+      .actions { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="actions">
+      <button type="button" onclick="window.print()">${escapeHtml(labels.print)}</button>
+      <button type="button" onclick="window.close()">${escapeHtml(labels.close)}</button>
+    </div>
+    <h1>${escapeHtml(labels.title)}</h1>
+    <dl>
+      <dt>${escapeHtml(labels.date)}</dt><dd>${escapeHtml(formattedDate)} (Europe/Nicosia)</dd>
+      <dt>${escapeHtml(labels.white)}</dt><dd>${escapeHtml(labels.player)}</dd>
+      <dt>${escapeHtml(labels.black)}</dt><dd>${escapeHtml(labels.stockfish)}</dd>
+      <dt>${escapeHtml(labels.result)}</dt><dd>${escapeHtml(result)}</dd>
+    </dl>
+    <h2>${escapeHtml(labels.moves)}</h2>
+    <ol>${moveMarkup}</ol>
+    <h2>${escapeHtml(labels.finalFen)}</h2>
+    <code>${escapeHtml(chess.fen())}</code>
+  </main>
+</body>
+</html>`);
+  printableWindow.document.close();
+
+  if (autoPrint) {
+    printableWindow.addEventListener("load", () => printableWindow.print(), { once: true });
+    window.setTimeout(() => printableWindow.print(), 300);
+  }
 }
 
 export default function MovesVisibilityToggle() {
@@ -197,6 +315,7 @@ export default function MovesVisibilityToggle() {
     : isGreek ? "Εμφάνιση κινήσεων" : "Show moves";
   const downloadLabel = isGreek ? "Λήψη παρτίδας" : "Download game";
   const printPreviewLabel = isGreek ? "Προεπισκόπηση εκτύπωσης" : "Print Preview";
+  const printLabel = isGreek ? "Εκτύπωση" : "Print";
   const hasMoves = sanMovesFromText(state.sanText).length > 0;
 
   return createPortal(
@@ -226,7 +345,7 @@ export default function MovesVisibilityToggle() {
       </button>
       <button
         disabled={!hasMoves}
-        onClick={() => window.print()}
+        onClick={() => openPrintableGame(state.sanText, state.language)}
         style={{
           minHeight: 36,
           padding: "0.45rem 0.75rem",
@@ -234,6 +353,17 @@ export default function MovesVisibilityToggle() {
         type="button"
       >
         {printPreviewLabel}
+      </button>
+      <button
+        disabled={!hasMoves}
+        onClick={() => openPrintableGame(state.sanText, state.language, true)}
+        style={{
+          minHeight: 36,
+          padding: "0.45rem 0.75rem",
+        }}
+        type="button"
+      >
+        {printLabel}
       </button>
     </>,
     state.host,
