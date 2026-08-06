@@ -5,7 +5,7 @@ import { sanFromSpeech } from "./voice/sanFromSpeech.js";
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const STOCKFISH_WORKER_URL = "/stockfish-17.1-lite-single-03e3232.js";
 const MATE_SCORE = 100000;
-const APP_VERSION = "v1.2.0_20260806";
+const APP_VERSION = "v1.2.1_20260806";
 
 const DIFFICULTY_LEVELS = [
   { id: 1, nameEn: "Beginner", nameEl: "Αρχάριος", skill: 0, depth: 5, nodes: 800, multiPv: 8, maxLoss: 500, bestChance: 0.2, temperature: 500 },
@@ -61,7 +61,7 @@ const COPY = {
     guide2: "Enter a legal SAN move, such as e4, Nf3, Bxe6 or O-O.",
     guide3: "Listen to the engine reply and keep the position in your memory.",
     guide4: "Press New game to reset the position and unlock difficulty selection.",
-    localNotice: "The game position and Stockfish engine run locally in this browser and device.",
+    localNotice: "Language and difficulty settings are stored locally in this browser. The game and Stockfish run on your device.",
     learnMore: "Learn more",
     rights: "All rights reserved.",
     license: "License",
@@ -111,7 +111,7 @@ const COPY = {
     guide2: "Γράψε νόμιμη κίνηση SAN, όπως e4, Nf3, Bxe6 ή O-O.",
     guide3: "Άκουσε την απάντηση του Stockfish και κράτησε τη θέση στη μνήμη σου.",
     guide4: "Πάτησε Νέα παρτίδα για επαναφορά και ξεκλείδωμα της δυσκολίας.",
-    localNotice: "Η θέση της παρτίδας και το Stockfish εκτελούνται τοπικά σε αυτόν τον browser και τη συσκευή.",
+    localNotice: "Οι ρυθμίσεις γλώσσας και δυσκολίας αποθηκεύονται τοπικά σε αυτόν τον browser. Η παρτίδα και το Stockfish εκτελούνται στη συσκευή σου.",
     learnMore: "Μάθε περισσότερα",
     rights: "Με επιφύλαξη παντός δικαιώματος.",
     license: "Άδεια",
