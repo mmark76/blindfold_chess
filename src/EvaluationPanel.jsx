@@ -98,7 +98,9 @@ export default function EvaluationPanel() {
   const currentFenRef = useRef(new Chess().fen());
   const candidatesRef = useRef(new Map());
   const analysisTimerRef = useRef(0);
+  const analysisRequestedRef = useRef(false);
   const searchActiveRef = useRef(false);
+  const showEvaluationRef = useRef(false);
 
   const [showEvaluation, setShowEvaluation] = useState(getInitialVisibility);
   const [lines, setLines] = useState([]);
@@ -109,8 +111,18 @@ export default function EvaluationPanel() {
     sanText: "",
   });
 
-  const moveCount = useMemo(() => sanMovesFromText(state.sanText).length, [state.sanText]);
   const fen = useMemo(() => gameFromSanText(state.sanText).fen(), [state.sanText]);
+
+  const beginAnalysis = (worker) => {
+    if (!worker || !analysisRequestedRef.current || !showEvaluationRef.current) return;
+
+    analysisRequestedRef.current = false;
+    candidatesRef.current.clear();
+    searchActiveRef.current = true;
+    worker.postMessage("setoption name MultiPV value 3");
+    worker.postMessage(`position fen ${currentFenRef.current}`);
+    worker.postMessage("go depth 12 nodes 120000");
+  };
 
   useEffect(() => {
     let animationFrame = 0;
@@ -213,6 +225,7 @@ export default function EvaluationPanel() {
 
         if (line === "readyok") {
           workerReadyRef.current = true;
+          beginAnalysis(worker);
           continue;
         }
 
@@ -247,12 +260,14 @@ export default function EvaluationPanel() {
 
     return () => {
       window.clearTimeout(analysisTimerRef.current);
+      analysisRequestedRef.current = false;
       searchActiveRef.current = false;
       worker.terminate();
     };
   }, []);
 
   useEffect(() => {
+    showEvaluationRef.current = showEvaluation;
     localStorage.setItem(STORAGE_KEY, String(showEvaluation));
 
     const worker = workerRef.current;
@@ -261,7 +276,8 @@ export default function EvaluationPanel() {
     setLines([]);
     window.clearTimeout(analysisTimerRef.current);
 
-    if (!worker || !showEvaluation || moveCount === 0) {
+    if (!worker || !showEvaluation) {
+      analysisRequestedRef.current = false;
       searchActiveRef.current = false;
       setAnalyzing(false);
       worker?.postMessage("stop");
@@ -269,22 +285,24 @@ export default function EvaluationPanel() {
     }
 
     setAnalyzing(true);
+    analysisRequestedRef.current = false;
     searchActiveRef.current = false;
     worker.postMessage("stop");
 
     analysisTimerRef.current = window.setTimeout(() => {
-      if (!workerReadyRef.current || !showEvaluation) {
+      if (!showEvaluationRef.current) {
         setAnalyzing(false);
         return;
       }
 
-      candidatesRef.current.clear();
-      searchActiveRef.current = true;
-      worker.postMessage("setoption name MultiPV value 3");
-      worker.postMessage(`position fen ${currentFenRef.current}`);
-      worker.postMessage("go depth 12 nodes 120000");
+      analysisRequestedRef.current = true;
+      if (workerReadyRef.current) {
+        beginAnalysis(worker);
+      } else {
+        worker.postMessage("isready");
+      }
     }, 100);
-  }, [fen, moveCount, showEvaluation]);
+  }, [fen, showEvaluation]);
 
   if (!state.host) return null;
 
@@ -296,9 +314,6 @@ export default function EvaluationPanel() {
   const engineVersion = isGreek
     ? "Μηχανή: Stockfish 17.1 Lite · μονό νήμα"
     : "Engine: Stockfish 17.1 Lite · single-thread";
-  const emptyText = isGreek
-    ? "Παίξε μία κίνηση για να εμφανιστεί αξιολόγηση."
-    : "Play a move to see an evaluation.";
   const analyzingText = isGreek ? "Ανάλυση…" : "Analyzing…";
   const depthLabel = isGreek ? "βάθος" : "depth";
 
@@ -321,8 +336,7 @@ export default function EvaluationPanel() {
 
       {showEvaluation ? (
         <div className="evaluation-lines" id="stockfish-evaluation-lines" aria-live="polite">
-          {moveCount === 0 ? <p>{emptyText}</p> : null}
-          {moveCount > 0 && lines.length === 0 ? <p>{analyzingText}</p> : null}
+          {lines.length === 0 ? <p>{analyzingText}</p> : null}
           {lines.slice(0, 3).map((item) => (
             <p key={item.multiPv}>
               <span>{item.multiPv}. {formatScore(item)}</span>
