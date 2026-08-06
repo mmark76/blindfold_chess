@@ -62,15 +62,19 @@
 .chessboard-piece {
   position: relative;
   z-index: 1;
-  font-family: "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols 2", serif;
+  font-family: "DejaVu Sans", "Noto Sans Symbols 2", "Segoe UI Symbol", serif;
   font-size: clamp(1.65rem, 7vw, 3.9rem);
   font-style: normal;
   font-weight: 400;
+  font-synthesis: none;
   line-height: 1;
+  forced-color-adjust: none;
 }
 
 .chessboard-piece.is-white-piece {
   color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  -webkit-text-stroke: 0.6px #111827;
   text-shadow:
     -1px -1px 0 #111827,
     1px -1px 0 #111827,
@@ -80,7 +84,9 @@
 }
 
 .chessboard-piece.is-black-piece {
-  color: #111111;
+  color: #000000;
+  -webkit-text-fill-color: #000000;
+  -webkit-text-stroke: 0.35px #000000;
   text-shadow:
     -1px -1px 0 rgb(255 255 255 / 0.82),
     1px -1px 0 rgb(255 255 255 / 0.82),
