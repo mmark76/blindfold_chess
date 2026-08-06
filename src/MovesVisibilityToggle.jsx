@@ -196,6 +196,7 @@ export default function MovesVisibilityToggle() {
     ? isGreek ? "Απόκρυψη κινήσεων" : "Hide moves"
     : isGreek ? "Εμφάνιση κινήσεων" : "Show moves";
   const downloadLabel = isGreek ? "Λήψη παρτίδας" : "Download game";
+  const printPreviewLabel = isGreek ? "Προεπισκόπηση εκτύπωσης" : "Print Preview";
   const hasMoves = sanMovesFromText(state.sanText).length > 0;
 
   return createPortal(
@@ -222,6 +223,17 @@ export default function MovesVisibilityToggle() {
         type="button"
       >
         {downloadLabel} (PGN)
+      </button>
+      <button
+        disabled={!hasMoves}
+        onClick={() => window.print()}
+        style={{
+          minHeight: 36,
+          padding: "0.45rem 0.75rem",
+        }}
+        type="button"
+      >
+        {printPreviewLabel}
       </button>
     </>,
     state.host,
