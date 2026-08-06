@@ -135,6 +135,7 @@ export default function EvaluationPanel() {
           host.className = "evaluation-panel-host";
           statusPanel.insertAdjacentElement("afterend", host);
         }
+        host.id = "stockfish-evaluation-panel";
 
         setState((previous) => {
           if (
@@ -169,6 +170,32 @@ export default function EvaluationPanel() {
       rootObserver.disconnect();
       languageObserver.disconnect();
       window.cancelAnimationFrame(animationFrame);
+    };
+  }, []);
+
+  useEffect(() => {
+    const assistantButton = document.querySelector(".assistant-launch-button");
+    if (!assistantButton) return undefined;
+
+    const openEvaluation = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setShowEvaluation(true);
+
+      window.requestAnimationFrame(() => {
+        document.getElementById("stockfish-evaluation-panel")?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    };
+
+    assistantButton.setAttribute("aria-controls", "stockfish-evaluation-panel");
+    assistantButton.addEventListener("click", openEvaluation, true);
+
+    return () => {
+      assistantButton.removeEventListener("click", openEvaluation, true);
+      assistantButton.removeAttribute("aria-controls");
     };
   }, []);
 
