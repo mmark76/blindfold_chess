@@ -6,18 +6,18 @@ import "./board-visibility.css";
 const STORAGE_KEY = "blindfold-show-board";
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const PIECES = Object.freeze({
-  K: "♔",
-  Q: "♕",
-  R: "♖",
-  B: "♗",
-  N: "♘",
-  P: "♙",
-  k: "♚",
-  q: "♛",
-  r: "♜",
-  b: "♝",
-  n: "♞",
-  p: "♟",
+  K: "♔\uFE0E",
+  Q: "♕\uFE0E",
+  R: "♖\uFE0E",
+  B: "♗\uFE0E",
+  N: "♘\uFE0E",
+  P: "♙\uFE0E",
+  k: "♚\uFE0E",
+  q: "♛\uFE0E",
+  r: "♜\uFE0E",
+  b: "♝\uFE0E",
+  n: "♞\uFE0E",
+  p: "♟\uFE0E",
 });
 
 const PIECE_NAMES = Object.freeze({
