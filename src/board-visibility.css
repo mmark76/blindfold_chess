@@ -1,0 +1,97 @@
+.board-visibility-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: #ffffff;
+  scroll-margin-top: 10rem;
+}
+
+.board-visibility-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.board-visibility-toolbar button {
+  min-height: 36px;
+  padding: 0.45rem 0.75rem;
+}
+
+.board-visibility-content {
+  margin-top: 0.8rem;
+}
+
+.board-turn-label {
+  margin: 0 0 0.55rem;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.chessboard {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  width: min(100%, 560px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 3px solid var(--accent-dark);
+  border-radius: 0.35rem;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 0.16);
+}
+
+.chessboard-square {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  aspect-ratio: 1;
+}
+
+.chessboard-square.is-light {
+  background: #fef3c7;
+  color: #451a03;
+}
+
+.chessboard-square.is-dark {
+  background: #b45309;
+  color: #fff7ed;
+}
+
+.chessboard-piece {
+  font-family: "DejaVu Sans", "Segoe UI Symbol", "Noto Sans Symbols 2", serif;
+  font-size: clamp(1.65rem, 7vw, 3.9rem);
+  line-height: 1;
+  filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.35));
+}
+
+.rank-label,
+.file-label {
+  position: absolute;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: clamp(0.5rem, 1.6vw, 0.72rem);
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.rank-label {
+  top: 0.2rem;
+  left: 0.22rem;
+}
+
+.file-label {
+  right: 0.22rem;
+  bottom: 0.18rem;
+}
+
+@media (max-width: 760px) {
+  .board-visibility-panel {
+    scroll-margin-top: 18rem;
+  }
+
+  .chessboard-piece {
+    font-size: clamp(1.45rem, 9.5vw, 3.2rem);
+  }
+}
