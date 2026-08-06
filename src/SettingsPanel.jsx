@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./settings-panel.css";
 
@@ -36,6 +36,7 @@ const LABELS = Object.freeze({
     font: "Font",
     boardSize: "Board size",
     reset: "Reset settings",
+    close: "Close",
     saved: "Appearance settings are stored locally in this browser.",
     themes: { classic: "Classic", light: "Light", dark: "Dark" },
     accents: { brown: "Brown", blue: "Blue", green: "Green", burgundy: "Burgundy" },
@@ -52,6 +53,7 @@ const LABELS = Object.freeze({
     font: "Γραμματοσειρά",
     boardSize: "Μέγεθος σκακιέρας",
     reset: "Επαναφορά ρυθμίσεων",
+    close: "Κλείσιμο",
     saved: "Οι ρυθμίσεις εμφάνισης αποθηκεύονται τοπικά σε αυτόν τον browser.",
     themes: { classic: "Κλασικό", light: "Φωτεινό", dark: "Σκούρο" },
     accents: { brown: "Καφέ", blue: "Μπλε", green: "Πράσινο", burgundy: "Μπορντό" },
@@ -101,8 +103,13 @@ function SettingsSelect({ id, label, value, options, onChange }) {
 }
 
 export default function SettingsPanel() {
+  const dialogRef = useRef(null);
+  const previousFocusRef = useRef(null);
   const [settings, setSettings] = useState(readSettings);
-  const [state, setState] = useState({ host: null, language: "en" });
+  const [language, setLanguage] = useState(
+    document.documentElement.lang === "el" ? "el" : "en",
+  );
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     applySettings(settings);
@@ -110,64 +117,79 @@ export default function SettingsPanel() {
   }, [settings]);
 
   useEffect(() => {
-    let animationFrame = 0;
+    const syncLanguageAndLink = () => {
+      setLanguage(document.documentElement.lang === "el" ? "el" : "en");
+      const settingsLink = document.querySelector(
+        '.utility-actions > a[href="#difficulty"], .utility-actions > a[data-settings-link]',
+      );
 
-    const sync = () => {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(() => {
-        const difficultySection = document.getElementById("difficulty");
-        const language = document.documentElement.lang === "el" ? "el" : "en";
-        const settingsLink = document.querySelector('.utility-actions > a[href="#difficulty"], .utility-actions > a[data-settings-link]');
-
-        if (settingsLink) {
-          settingsLink.dataset.settingsLink = "true";
-          settingsLink.setAttribute("href", "#appearance-settings");
-        }
-
-        if (!difficultySection) {
-          setState({ host: null, language });
-          return;
-        }
-
-        let host = document.getElementById("appearance-settings");
-        if (!host) {
-          host = document.createElement("section");
-          host.id = "appearance-settings";
-          host.className = "settings-panel-host";
-          difficultySection.insertAdjacentElement("beforebegin", host);
-        }
-
-        setState((previous) => {
-          if (previous.host === host && previous.language === language) return previous;
-          return { host, language };
-        });
-      });
+      if (settingsLink) {
+        settingsLink.dataset.settingsLink = "true";
+        settingsLink.setAttribute("href", "#appearance-settings-dialog");
+        settingsLink.setAttribute("aria-haspopup", "dialog");
+        settingsLink.setAttribute("aria-controls", "appearance-settings-dialog");
+      }
     };
 
-    sync();
+    const handleSettingsClick = (event) => {
+      const trigger = event.target.closest?.(
+        '.utility-actions > a[data-settings-link], .utility-actions > a[href="#difficulty"]',
+      );
+      if (!trigger) return;
 
-    const rootObserver = new MutationObserver(sync);
+      event.preventDefault();
+      previousFocusRef.current = trigger;
+      setIsOpen(true);
+    };
+
+    syncLanguageAndLink();
+
+    const rootObserver = new MutationObserver(syncLanguageAndLink);
     rootObserver.observe(document.getElementById("root") || document.body, {
       childList: true,
       subtree: true,
     });
 
-    const languageObserver = new MutationObserver(sync);
+    const languageObserver = new MutationObserver(syncLanguageAndLink);
     languageObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["lang"],
     });
 
+    document.addEventListener("click", handleSettingsClick, true);
+
     return () => {
       rootObserver.disconnect();
       languageObserver.disconnect();
-      window.cancelAnimationFrame(animationFrame);
+      document.removeEventListener("click", handleSettingsClick, true);
     };
   }, []);
 
-  if (!state.host) return null;
+  useEffect(() => {
+    if (!isOpen) return undefined;
 
-  const copy = LABELS[state.language] || LABELS.en;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const closeDialog = () => {
+      setIsOpen(false);
+      window.requestAnimationFrame(() => previousFocusRef.current?.focus());
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") closeDialog();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    window.requestAnimationFrame(() => dialogRef.current?.focus());
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const copy = LABELS[language] || LABELS.en;
   const updateSetting = (key) => (event) => {
     const value = event.target.value;
     if (!ALLOWED_VALUES[key].has(value)) return;
@@ -175,57 +197,84 @@ export default function SettingsPanel() {
   };
 
   const resetSettings = () => setSettings({ ...DEFAULT_SETTINGS });
+  const closeSettings = () => {
+    setIsOpen(false);
+    window.requestAnimationFrame(() => previousFocusRef.current?.focus());
+  };
+
+  if (!isOpen) return null;
 
   return createPortal(
-    <div className="settings-panel">
-      <div className="settings-heading">
-        <div>
-          <h3>{copy.heading}</h3>
-          <p>{copy.intro}</p>
+    <div
+      className="settings-modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) closeSettings();
+      }}
+      role="presentation"
+    >
+      <section
+        aria-labelledby="appearance-settings-title"
+        aria-modal="true"
+        className="settings-dialog"
+        id="appearance-settings-dialog"
+        ref={dialogRef}
+        role="dialog"
+        tabIndex={-1}
+      >
+        <div className="settings-heading">
+          <div>
+            <h2 id="appearance-settings-title">{copy.heading}</h2>
+            <p>{copy.intro}</p>
+          </div>
+          <button aria-label={copy.close} onClick={closeSettings} type="button">×</button>
         </div>
-        <button onClick={resetSettings} type="button">{copy.reset}</button>
-      </div>
 
-      <div className="settings-grid">
-        <SettingsSelect
-          id="ui-theme-select"
-          label={copy.theme}
-          onChange={updateSetting("theme")}
-          options={copy.themes}
-          value={settings.theme}
-        />
-        <SettingsSelect
-          id="ui-accent-select"
-          label={copy.accent}
-          onChange={updateSetting("accent")}
-          options={copy.accents}
-          value={settings.accent}
-        />
-        <SettingsSelect
-          id="ui-text-size-select"
-          label={copy.textSize}
-          onChange={updateSetting("textSize")}
-          options={copy.textSizes}
-          value={settings.textSize}
-        />
-        <SettingsSelect
-          id="ui-font-select"
-          label={copy.font}
-          onChange={updateSetting("font")}
-          options={copy.fonts}
-          value={settings.font}
-        />
-        <SettingsSelect
-          id="ui-board-size-select"
-          label={copy.boardSize}
-          onChange={updateSetting("boardSize")}
-          options={copy.boardSizes}
-          value={settings.boardSize}
-        />
-      </div>
+        <div className="settings-grid">
+          <SettingsSelect
+            id="ui-theme-select"
+            label={copy.theme}
+            onChange={updateSetting("theme")}
+            options={copy.themes}
+            value={settings.theme}
+          />
+          <SettingsSelect
+            id="ui-accent-select"
+            label={copy.accent}
+            onChange={updateSetting("accent")}
+            options={copy.accents}
+            value={settings.accent}
+          />
+          <SettingsSelect
+            id="ui-text-size-select"
+            label={copy.textSize}
+            onChange={updateSetting("textSize")}
+            options={copy.textSizes}
+            value={settings.textSize}
+          />
+          <SettingsSelect
+            id="ui-font-select"
+            label={copy.font}
+            onChange={updateSetting("font")}
+            options={copy.fonts}
+            value={settings.font}
+          />
+          <SettingsSelect
+            id="ui-board-size-select"
+            label={copy.boardSize}
+            onChange={updateSetting("boardSize")}
+            options={copy.boardSizes}
+            value={settings.boardSize}
+          />
+        </div>
 
-      <p className="settings-storage-note">{copy.saved}</p>
+        <p className="settings-storage-note">{copy.saved}</p>
+
+        <div className="settings-dialog-actions">
+          <button onClick={resetSettings} type="button">{copy.reset}</button>
+          <button className="primary-button" onClick={closeSettings} type="button">{copy.close}</button>
+        </div>
+      </section>
     </div>,
-    state.host,
+    document.body,
   );
 }
