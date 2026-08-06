@@ -60,10 +60,33 @@
 }
 
 .chessboard-piece {
-  font-family: "DejaVu Sans", "Segoe UI Symbol", "Noto Sans Symbols 2", serif;
+  position: relative;
+  z-index: 1;
+  font-family: "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols 2", serif;
   font-size: clamp(1.65rem, 7vw, 3.9rem);
+  font-style: normal;
+  font-weight: 400;
   line-height: 1;
-  filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.35));
+}
+
+.chessboard-piece.is-white-piece {
+  color: #ffffff;
+  text-shadow:
+    -1px -1px 0 #111827,
+    1px -1px 0 #111827,
+    -1px 1px 0 #111827,
+    1px 1px 0 #111827,
+    0 2px 3px rgb(15 23 42 / 0.45);
+}
+
+.chessboard-piece.is-black-piece {
+  color: #111111;
+  text-shadow:
+    -1px -1px 0 rgb(255 255 255 / 0.82),
+    1px -1px 0 rgb(255 255 255 / 0.82),
+    -1px 1px 0 rgb(255 255 255 / 0.82),
+    1px 1px 0 rgb(255 255 255 / 0.82),
+    0 2px 3px rgb(15 23 42 / 0.32);
 }
 
 .rank-label,
