@@ -16,6 +16,17 @@
   gap: 0.75rem;
 }
 
+.evaluation-title {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.evaluation-title small {
+  opacity: 0.72;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .evaluation-toolbar button {
   min-height: 36px;
   padding: 0.45rem 0.75rem;
