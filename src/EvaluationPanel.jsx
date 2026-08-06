@@ -5,6 +5,7 @@ import "./evaluation-panel.css";
 
 const STORAGE_KEY = "blindfold-show-evaluation";
 const STOCKFISH_WORKER_URL = "/stockfish-17.1-lite-single-03e3232.js";
+const PV_MOVE_LIMIT = 7;
 const EMPTY_MOVE_TEXTS = new Set(["", "No moves yet.", "Δεν υπάρχουν κινήσεις ακόμη."]);
 
 function sanMovesFromText(text) {
@@ -32,20 +33,27 @@ function gameFromSanText(text) {
   return chess;
 }
 
-function uciToSan(fen, uci) {
-  if (!uci || uci === "(none)") return "";
-
+function pvToSan(fen, uciMoves) {
   const chess = new Chess(fen);
-  try {
-    const move = chess.move({
-      from: uci.slice(0, 2),
-      to: uci.slice(2, 4),
-      promotion: uci.length >= 5 ? uci[4] : undefined,
-    });
-    return move?.san || uci;
-  } catch {
-    return uci;
+  const sanMoves = [];
+
+  for (const uci of uciMoves.slice(0, PV_MOVE_LIMIT)) {
+    if (!uci || uci === "(none)") break;
+
+    try {
+      const move = chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        promotion: uci.length >= 5 ? uci[4] : undefined,
+      });
+      if (!move) break;
+      sanMoves.push(move.san);
+    } catch {
+      break;
+    }
   }
+
+  return sanMoves.join(" ");
 }
 
 function parseEvaluationLine(line, fen) {
@@ -67,14 +75,14 @@ function parseEvaluationLine(line, fen) {
 
   const sideToMove = fen.split(" ")[1];
   const whiteScore = sideToMove === "w" ? rawScore : -rawScore;
-  const uci = tokens[pvIndex + 1];
+  const pvMoves = tokens.slice(pvIndex + 1, pvIndex + 1 + PV_MOVE_LIMIT);
 
   return {
     depth: depthIndex >= 0 ? Number(tokens[depthIndex + 1]) || 0 : 0,
     multiPv: multiPvIndex >= 0 ? Number(tokens[multiPvIndex + 1]) || 1 : 1,
     scoreType,
     whiteScore,
-    san: uciToSan(fen, uci),
+    pvSan: pvToSan(fen, pvMoves),
   };
 }
 
@@ -326,7 +334,7 @@ export default function EvaluationPanel() {
           {lines.slice(0, 3).map((item) => (
             <p key={item.multiPv}>
               <span>{item.multiPv}. {formatScore(item)}</span>
-              <span>{item.san || "—"}</span>
+              <span>{item.pvSan || "—"}</span>
               <small>{depthLabel} {item.depth}</small>
             </p>
           ))}
