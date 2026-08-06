@@ -92,16 +92,31 @@ li {
 
 .app-shell {
   min-height: 100vh;
+  padding-top: 9.5rem;
+  padding-bottom: 7.75rem;
 }
 
 .app-header {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  inset: 0 0 auto;
   z-index: 40;
-  padding: 0.9rem max(1rem, calc((100vw - var(--content-width)) / 2));
+  padding: 0.9rem 0;
   border-bottom: 1px solid var(--border);
-  background: rgb(255 255 255 / 0.9);
+  background: rgb(255 255 255 / 0.94);
+  box-shadow: 0 4px 14px rgb(15 23 42 / 0.08);
   backdrop-filter: blur(12px);
+}
+
+.app-header-top,
+.navigation-row,
+.app-main,
+.local-storage-notice,
+.app-footer > p,
+.app-footer > .footer-meta,
+.app-footer > .build-version {
+  width: min(var(--content-width), calc(100% - 2rem));
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .app-header-top {
@@ -261,13 +276,12 @@ li {
 }
 
 .app-main {
-  width: min(var(--content-width), calc(100% - 2rem));
-  margin: 0 auto;
   padding: 2rem 0;
 }
 
 .game-panel,
 .guide-panel {
+  width: 100%;
   border: 1px solid var(--border);
   border-radius: 1.2rem;
   background: var(--surface);
@@ -275,16 +289,15 @@ li {
 }
 
 .game-panel {
-  max-width: 820px;
-  margin: 0 auto;
+  margin: 0;
   padding: clamp(1.15rem, 3vw, 2rem);
+  scroll-margin-top: 10rem;
 }
 
 .guide-panel {
-  max-width: 820px;
-  margin: 1.25rem auto 0;
+  margin: 1.25rem 0 0;
   padding: clamp(1.15rem, 3vw, 1.7rem);
-  scroll-margin-top: 11rem;
+  scroll-margin-top: 10rem;
 }
 
 .page-heading {
@@ -306,7 +319,7 @@ li {
 .control-section,
 .moves-panel,
 .status-panel {
-  scroll-margin-top: 11rem;
+  scroll-margin-top: 10rem;
 }
 
 .control-section {
@@ -399,8 +412,6 @@ input {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
-  width: min(var(--content-width), calc(100% - 2rem));
-  margin: 0 auto;
   padding: 0.75rem 0 1rem;
   color: var(--muted);
   font-size: 0.82rem;
@@ -413,16 +424,21 @@ input {
 }
 
 .app-footer {
-  position: relative;
-  padding: 0.9rem 1rem 1rem;
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 40;
+  padding: 0.9rem 0 1rem;
   border-top: 1px solid var(--border);
-  background: var(--surface);
+  background: rgb(255 251 235 / 0.97);
+  box-shadow: 0 -4px 14px rgb(15 23 42 / 0.08);
   color: var(--muted);
   text-align: center;
+  backdrop-filter: blur(12px);
 }
 
 .app-footer p {
-  margin: 0;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .footer-meta {
@@ -495,8 +511,19 @@ input {
 }
 
 @media (max-width: 760px) {
-  .app-header {
-    position: relative;
+  .app-shell {
+    padding-top: 17.5rem;
+    padding-bottom: 10rem;
+  }
+
+  .app-header-top,
+  .navigation-row,
+  .app-main,
+  .local-storage-notice,
+  .app-footer > p,
+  .app-footer > .footer-meta,
+  .app-footer > .build-version {
+    width: min(100% - 1rem, var(--content-width));
   }
 
   .app-header-top {
@@ -514,7 +541,6 @@ input {
   }
 
   .app-main {
-    width: min(100% - 1rem, var(--content-width));
     padding-top: 0.75rem;
   }
 
@@ -531,8 +557,11 @@ input {
     width: 100%;
   }
 
+  .game-panel,
+  .guide-panel,
   .control-section,
-  .guide-panel {
-    scroll-margin-top: 1rem;
+  .moves-panel,
+  .status-panel {
+    scroll-margin-top: 18rem;
   }
 }
