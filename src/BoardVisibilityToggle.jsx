@@ -121,6 +121,11 @@ function getInitialVisibility() {
   return localStorage.getItem(STORAGE_KEY) === "true";
 }
 
+function getPieceColorClass(piece) {
+  if (!piece) return "";
+  return piece === piece.toUpperCase() ? "is-white-piece" : "is-black-piece";
+}
+
 export default function BoardVisibilityToggle() {
   const [showBoard, setShowBoard] = useState(getInitialVisibility);
   const [state, setState] = useState({
@@ -233,6 +238,7 @@ export default function BoardVisibilityToggle() {
             {squares.map(({ square, piece, rowIndex, fileIndex }) => {
               const isLight = (rowIndex + fileIndex) % 2 === 0;
               const pieceName = piece ? pieceNames[piece] : "";
+              const pieceColorClass = getPieceColorClass(piece);
 
               return (
                 <span
@@ -242,7 +248,12 @@ export default function BoardVisibilityToggle() {
                   role="gridcell"
                   title={pieceName ? `${square}: ${pieceName}` : square}
                 >
-                  <span aria-hidden="true" className="chessboard-piece">{PIECES[piece] || ""}</span>
+                  <span
+                    aria-hidden="true"
+                    className={`chessboard-piece ${pieceColorClass}`.trim()}
+                  >
+                    {PIECES[piece] || ""}
+                  </span>
                   {fileIndex === 0 ? <small className="rank-label" aria-hidden="true">{8 - rowIndex}</small> : null}
                   {rowIndex === 7 ? <small className="file-label" aria-hidden="true">{FILES[fileIndex]}</small> : null}
                 </span>
