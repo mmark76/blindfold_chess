@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
+import App from "./AppV2.jsx";
 import BoardVisibilityToggle from "./BoardVisibilityToggle.jsx";
 import ConfirmMoveButton from "./ConfirmMoveButton.jsx";
 import EvaluationPanel from "./EvaluationPanel.jsx";
