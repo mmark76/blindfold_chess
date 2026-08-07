@@ -373,6 +373,18 @@ input {
   color: #ffffff;
 }
 
+.danger-button {
+  border-color: #b91c1c;
+  background: #ffffff;
+  color: #b91c1c;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: #991b1b;
+  background: #b91c1c;
+  color: #ffffff;
+}
+
 .move-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
