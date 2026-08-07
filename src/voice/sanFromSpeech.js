@@ -1,135 +1,156 @@
-// All strings in English
+// Spoken chess moves are expected in English, but browser speech recognition
+// frequently returns homophones (for example "night" instead of "knight").
 
 const numberWords = new Map([
-  ["one", "1"], ["two", "2"], ["three", "3"], ["four", "4"],
-  ["five", "5"], ["six", "6"], ["seven", "7"], ["eight", "8"]
+  ["one", "1"], ["won", "1"],
+  ["two", "2"], ["too", "2"],
+  ["three", "3"], ["tree", "3"],
+  ["four", "4"], ["for", "4"],
+  ["five", "5"],
+  ["six", "6"],
+  ["seven", "7"],
+  ["eight", "8"], ["ate", "8"],
+]);
+
+const fileWords = new Map([
+  ["a", "a"], ["ay", "a"],
+  ["b", "b"], ["bee", "b"],
+  ["c", "c"], ["see", "c"], ["sea", "c"],
+  ["d", "d"], ["dee", "d"],
+  ["e", "e"],
+  ["f", "f"], ["ef", "f"],
+  ["g", "g"], ["gee", "g"],
+  ["h", "h"], ["aitch", "h"],
 ]);
 
 const pieceWords = new Map([
-  ["knight", "N"],
-  ["bishop", "B"],
-  ["rook", "R"],
-  ["queen", "Q"],
-  ["king", "K"]
+  ["knight", "N"], ["night", "N"], ["nite", "N"], ["nights", "N"],
+  ["bishop", "B"], ["bishops", "B"],
+  ["rook", "R"], ["rooks", "R"], ["rock", "R"],
+  ["queen", "Q"], ["queens", "Q"],
+  ["king", "K"], ["kings", "K"],
 ]);
 
 const promoWords = new Map([
   ["queen", "Q"],
-  ["rook", "R"],
+  ["rook", "R"], ["rock", "R"],
   ["bishop", "B"],
-  ["knight", "N"]
+  ["knight", "N"], ["night", "N"], ["nite", "N"],
 ]);
 
-function normToken(t) {
-  let s = (t || "").toLowerCase().trim();
-  s = s.replace(/[^a-z0-9]/g, "");
-  if (numberWords.has(s)) return numberWords.get(s);
-  return s;
+const captureWords = new Set(["takes", "take", "capture", "captures", "captured", "x"]);
+
+function cleanToken(token) {
+  return String(token || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]/g, "");
 }
 
-function isFile(t) {
-  return typeof t === "string" && /^[a-h]$/.test(t);
+function normalizeFile(token) {
+  return fileWords.get(cleanToken(token)) || "";
 }
 
-function isRank(t) {
-  return typeof t === "string" && /^[1-8]$/.test(t);
+function normalizeRank(token) {
+  const cleaned = cleanToken(token);
+  if (/^[1-8]$/.test(cleaned)) return cleaned;
+  // "to" is deliberately handled only where a rank is expected, so phrases
+  // such as "knight to f three" do not get corrupted globally.
+  if (cleaned === "to") return "2";
+  return numberWords.get(cleaned) || "";
 }
 
-function toSquare(file, rank) {
-  if (!isFile(file) || !isRank(rank)) return "";
-  return `${file}${rank}`;
+function toSquare(fileToken, rankToken) {
+  const file = normalizeFile(fileToken);
+  const rank = normalizeRank(rankToken);
+  return file && rank ? `${file}${rank}` : "";
+}
+
+function findSquares(tokens) {
+  const squares = [];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const square = toSquare(tokens[index], tokens[index + 1]);
+    if (square) squares.push({ square, index });
+  }
+  return squares;
+}
+
+function appendSuffix(san, hasCheck, hasMate) {
+  if (hasMate) return `${san}#`;
+  if (hasCheck) return `${san}+`;
+  return san;
 }
 
 export function sanFromSpeech(raw) {
   if (!raw) return "";
 
-  const cleaned = raw
+  const cleaned = String(raw)
     .toLowerCase()
-    .replace(/-/g, " ")
+    .replace(/[–—-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-  // Castling
+  // Castling. Accept common recognition variants such as "king side castle".
+  const compact = cleaned.replace(/\s+/g, "");
+  const mentionsCastle = /castle|castling/.test(cleaned);
   if (
-    cleaned.includes("castle") &&
-    (cleaned.includes("king side") || cleaned.includes("kingside") || cleaned.includes("short"))
+    (mentionsCastle && /(king\s*side|kingside|short)/.test(cleaned)) ||
+    /^(oo|00)$/.test(compact)
   ) return "O-O";
   if (
-    cleaned.includes("castle") &&
-    (cleaned.includes("queen side") || cleaned.includes("queenside") || cleaned.includes("long"))
+    (mentionsCastle && /(queen\s*side|queenside|long)/.test(cleaned)) ||
+    /^(ooo|000)$/.test(compact)
   ) return "O-O-O";
-  if (cleaned === "o o" || cleaned === "oo" || cleaned === "o-o") return "O-O";
-  if (cleaned === "o o o" || cleaned === "ooo" || cleaned === "o-o-o") return "O-O-O";
 
-  const tokens = cleaned.split(" ").map(normToken).filter(Boolean);
+  const tokens = cleaned.split(" ").map(cleanToken).filter(Boolean);
+  const hasMate = tokens.some((token) => token === "checkmate" || token === "mate");
+  const hasCheck = hasMate || tokens.includes("check");
+  const isCapture = tokens.some((token) => captureWords.has(token));
+  const squares = findSquares(tokens);
 
-  const hasMate = tokens.includes("checkmate") || tokens.includes("mate");
-  const hasCheck = tokens.includes("check") || hasMate;
-
-  // Promotion parsing (basic)
   let promo = "";
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i] === "promote" || tokens[i] === "promotion" || tokens[i] === "promotes") {
-      for (let j = i; j < Math.min(i + 4, tokens.length); j++) {
-        const p = tokens[j];
-        if (promoWords.has(p)) promo = `=${promoWords.get(p)}`;
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (["promote", "promotion", "promotes", "promoting"].includes(tokens[index])) {
+      for (let next = index + 1; next < Math.min(index + 5, tokens.length); next += 1) {
+        if (promoWords.has(tokens[next])) {
+          promo = `=${promoWords.get(tokens[next])}`;
+          break;
+        }
       }
     }
   }
 
-  const takesIdx = tokens.findIndex((t) => t === "takes" || t === "capture" || t === "captures" || t === "x");
-  const isCapture = takesIdx !== -1;
-
-  // Pawn move: "e four" -> "e4"
-  if (tokens.length >= 2 && isFile(tokens[0]) && isRank(tokens[1])) {
-    let san = toSquare(tokens[0], tokens[1]);
-
-    if (!promo && tokens.length >= 3 && promoWords.has(tokens[2])) {
-      promo = `=${promoWords.get(tokens[2])}`;
-    }
-    san += promo;
-
-    if (hasMate) san += "#";
-    else if (hasCheck) san += "+";
-    return san;
+  const pieceIndex = tokens.findIndex((token) => pieceWords.has(token));
+  if (pieceIndex !== -1 && squares.length) {
+    const piece = pieceWords.get(tokens[pieceIndex]);
+    const destination = squares[squares.length - 1].square;
+    return appendSuffix(`${piece}${isCapture ? "x" : ""}${destination}${promo}`, hasCheck, hasMate);
   }
 
-  // Pawn capture: "d takes e five" -> "dxe5"
-  if (
-    tokens.length >= 4 &&
-    isFile(tokens[0]) &&
-    isCapture &&
-    isFile(tokens[takesIdx + 1]) &&
-    isRank(tokens[takesIdx + 2])
-  ) {
-    const fromFile = tokens[0];
-    const sq = toSquare(tokens[takesIdx + 1], tokens[takesIdx + 2]);
-    if (sq) {
-      let san = `${fromFile}x${sq}${promo}`;
-      if (hasMate) san += "#";
-      else if (hasCheck) san += "+";
-      return san;
+  // Pawn capture: "d takes e five" / "dee takes e five" -> dxe5.
+  if (isCapture && squares.length) {
+    const captureIndex = tokens.findIndex((token) => captureWords.has(token));
+    const fromFile = normalizeFile(tokens[Math.max(0, captureIndex - 1)]);
+    const destination = squares[squares.length - 1].square;
+    if (fromFile && destination) {
+      return appendSuffix(`${fromFile}x${destination}${promo}`, hasCheck, hasMate);
     }
   }
 
-  // Piece move/capture: "knight f three" -> "Nf3", "bishop takes e five" -> "Bxe5"
-  const pieceIdx = tokens.findIndex((t) => pieceWords.has(t));
-  if (pieceIdx !== -1) {
-    const P = pieceWords.get(tokens[pieceIdx]);
-
-    let dest = "";
-    for (let i = 0; i < tokens.length - 1; i++) {
-      if (isFile(tokens[i]) && isRank(tokens[i + 1])) dest = toSquare(tokens[i], tokens[i + 1]);
+  // Pawn move: "e four", "ee four", etc.
+  if (squares.length) {
+    const destination = squares[squares.length - 1].square;
+    if (!promo) {
+      const lastSquare = squares[squares.length - 1];
+      const afterRank = tokens[lastSquare.index + 2];
+      if (promoWords.has(afterRank)) promo = `=${promoWords.get(afterRank)}`;
     }
-    if (!dest) return "";
-
-    let san = P + (isCapture ? "x" : "") + dest + promo;
-    if (hasMate) san += "#";
-    else if (hasCheck) san += "+";
-    return san;
+    return appendSuffix(`${destination}${promo}`, hasCheck, hasMate);
   }
 
-  // Fallback: already-SAN-ish
-  const fallback = cleaned.replace(/\s+/g, "").replace(/[^a-z0-9x\+\#\=\-o]/gi, "");
+  // Fallback for text already close to SAN.
+  const fallback = cleaned
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9x+#=o-]/gi, "");
   return fallback || "";
 }
