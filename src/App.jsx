@@ -44,6 +44,8 @@ const COPY = {
     nodes: "nodes",
     locked: "Locked for this game",
     newGame: "New game",
+    resign: "Resign",
+    resignConfirm: "Resign this game? Stockfish will win.",
     startVoice: "Start voice",
     stop: "Stop",
     placeholder: "Enter SAN: e4, Nf3, Bxe6, O-O",
@@ -94,6 +96,8 @@ const COPY = {
     nodes: "κόμβοι",
     locked: "Κλειδωμένο για αυτή την παρτίδα",
     newGame: "Νέα παρτίδα",
+    resign: "Παραίτηση",
+    resignConfirm: "Να εγκαταλείψεις αυτή την παρτίδα; Το Stockfish θα κερδίσει.",
     startVoice: "Έναρξη φωνής",
     stop: "Διακοπή",
     placeholder: "Κίνηση SAN: e4, Nf3, Bxe6, O-O",
@@ -322,6 +326,7 @@ export default function App() {
   const engineRef = useRef(null);
   const recogRef = useRef(null);
   const difficultyRef = useRef(5);
+  const gameEndedRef = useRef(false);
   const engineSearchRef = useRef({ profile: DIFFICULTY_LEVELS[4], candidates: new Map() });
 
   const [language, setLanguage] = useState(() => localStorage.getItem("blindfold-language") || "en");
@@ -337,6 +342,7 @@ export default function App() {
     return saved >= 1 && saved <= 10 ? saved : 5;
   });
   const [gameStarted, setGameStarted] = useState(false);
+  const [gameEnded, setGameEnded] = useState(false);
   const [engineReady, setEngineReady] = useState(false);
   const [legalSection, setLegalSection] = useState(null);
 
@@ -386,6 +392,12 @@ export default function App() {
     return () => worker.terminate();
   }, []);
 
+  function endGame() {
+    gameEndedRef.current = true;
+    setGameEnded(true);
+    setBusy(false);
+  }
+
   function handleEngineLine(line) {
     if (!line) return;
     if (line === "readyok") {
@@ -393,6 +405,7 @@ export default function App() {
       return;
     }
     if (line.includes("uciok")) return;
+    if (gameEndedRef.current) return;
 
     const info = parseEngineInfo(line);
     if (info) {
@@ -414,6 +427,8 @@ export default function App() {
   }
 
   function finishEngineMove(selectedUci, fallbackUci) {
+    if (gameEndedRef.current) return;
+
     const chess = chessRef.current;
     const attempts = [selectedUci, fallbackUci].filter((uci, index, all) => uci && all.indexOf(uci) === index);
     let move = null;
@@ -433,6 +448,7 @@ export default function App() {
     setBusy(false);
 
     if (!move) {
+      endGame();
       setStatus(language === "el" ? "Το Stockfish δεν έχει νόμιμη κίνηση." : "Engine has no legal move.");
       speak("I have no legal move.");
       return;
@@ -445,11 +461,13 @@ export default function App() {
     speak(`My move: ${move.san}. Your move.`);
 
     if (chess.isCheckmate()) {
+      endGame();
       setStatus(language === "el" ? "Ματ." : "Checkmate.");
       speak("Checkmate.");
       return;
     }
     if (chess.isDraw()) {
+      endGame();
       setStatus(language === "el" ? "Ισοπαλία." : "Draw.");
       speak("Draw.");
     }
@@ -463,6 +481,8 @@ export default function App() {
   }
 
   function startListeningInternal(onResult) {
+    if (gameEndedRef.current) return;
+
     if (!SpeechRecognition) {
       setStatus(language === "el"
         ? "Η φωνητική εισαγωγή δεν είναι διαθέσιμη. Γράψε μια κίνηση SAN."
@@ -496,6 +516,8 @@ export default function App() {
   }
 
   function requestEngineMove() {
+    if (gameEndedRef.current) return;
+
     const engine = engineRef.current;
     if (!engine) {
       setStatus(language === "el" ? "Το Stockfish δεν είναι έτοιμο. Προσπάθησε ξανά." : "Engine is not ready. Please try again.");
@@ -520,7 +542,7 @@ export default function App() {
   }
 
   function applyPlayerSan(rawSan, source = "keyboard") {
-    if (busy) return;
+    if (busy || gameEndedRef.current) return;
 
     const san = (rawSan || "").trim();
     if (!san) {
@@ -554,11 +576,13 @@ export default function App() {
     setMoves((previous) => [...previous, move.san]);
 
     if (chess.isCheckmate()) {
+      endGame();
       setStatus(language === "el" ? "Ματ." : "Checkmate.");
       speak("Checkmate.");
       return;
     }
     if (chess.isDraw()) {
+      endGame();
       setStatus(language === "el" ? "Ισοπαλία." : "Draw.");
       speak("Draw.");
       return;
@@ -579,7 +603,7 @@ export default function App() {
   }
 
   function startListeningForMove() {
-    if (busy) return;
+    if (busy || gameEndedRef.current) return;
 
     setMode("MOVE");
     setPendingSan("");
@@ -607,7 +631,7 @@ export default function App() {
   }
 
   function startListeningForConfirm(sanToConfirm) {
-    if (busy) return;
+    if (busy || gameEndedRef.current) return;
 
     setStatus(language === "el"
       ? `Επιβεβαίωση: ${sanToConfirm}. Πες confirm ή cancel.`
@@ -665,6 +689,23 @@ export default function App() {
       : `Selected level ${profile.id}: ${name}.`);
   }
 
+  function resignGame() {
+    if (!gameStarted || gameEndedRef.current) return;
+    if (!window.confirm(copy.resignConfirm)) return;
+
+    stopListening();
+    engineRef.current?.postMessage("stop");
+    engineSearchRef.current.candidates.clear();
+    endGame();
+    setTypedSan("");
+    setMode("MOVE");
+    setPendingSan("");
+    setStatus(language === "el"
+      ? "Παραίτηση. Το Stockfish κερδίζει 0-1. Πάτησε Νέα παρτίδα για να ξαναπαίξεις."
+      : "You resigned. Stockfish wins 0-1. Press New game to play again.");
+    speak("You resigned. Stockfish wins.");
+  }
+
   function newGame() {
     stopListening();
     engineRef.current?.postMessage("stop");
@@ -672,11 +713,13 @@ export default function App() {
     engineRef.current?.postMessage("isready");
     engineSearchRef.current.candidates.clear();
 
+    gameEndedRef.current = false;
     chessRef.current = new Chess();
     setMoves([]);
     setTypedSan("");
     setBusy(false);
     setGameStarted(false);
+    setGameEnded(false);
     setMode("MOVE");
     setPendingSan("");
     setStatus(language === "el"
@@ -776,7 +819,8 @@ export default function App() {
 
           <div className="game-actions">
             <button className="primary-button" onClick={newGame} disabled={busy}>{copy.newGame}</button>
-            <button onClick={startListeningForMove} disabled={busy || listening || !speechSupported}>{copy.startVoice}</button>
+            <button className="danger-button" onClick={resignGame} disabled={!gameStarted || gameEnded}>{copy.resign}</button>
+            <button onClick={startListeningForMove} disabled={busy || gameEnded || listening || !speechSupported}>{copy.startVoice}</button>
             <button onClick={stopListening} disabled={!listening}>{copy.stop}</button>
           </div>
 
@@ -793,9 +837,9 @@ export default function App() {
                 autoCapitalize="characters"
                 autoComplete="off"
                 spellCheck="false"
-                disabled={busy}
+                disabled={busy || gameEnded}
               />
-              <button className="primary-button" type="submit" disabled={busy || !typedSan.trim()}>{copy.playMove}</button>
+              <button className="primary-button" type="submit" disabled={busy || gameEnded || !typedSan.trim()}>{copy.playMove}</button>
             </form>
           </section>
 
