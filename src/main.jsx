@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./voice/speechRecognitionBridge.js";
 import App from "./App.jsx";
 import globalStyles from "./styles.css?raw";
 import boardStyles from "./board-visibility.css?raw";
