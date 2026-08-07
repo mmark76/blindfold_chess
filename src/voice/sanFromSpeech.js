@@ -24,7 +24,7 @@ const fileWords = new Map([
 ]);
 
 const pieceWords = new Map([
-  ["knight", "N"], ["night", "N"], ["nite", "N"], ["nights", "N"],
+  ["knight", "N"], ["night", "N"], ["nite", "N"], ["nights", "N"], ["horse", "N"],
   ["bishop", "B"], ["bishops", "B"],
   ["rook", "R"], ["rooks", "R"], ["rock", "R"],
   ["queen", "Q"], ["queens", "Q"],
@@ -60,6 +60,22 @@ function normalizeRank(token) {
   return numberWords.get(cleaned) || "";
 }
 
+function normalizeCompactSquare(token) {
+  const cleaned = cleanToken(token);
+  const direct = /^([a-h])([1-8])$/.exec(cleaned);
+  if (direct) return `${direct[1]}${direct[2]}`;
+
+  // Some engines join a spoken file-name homophone and rank, e.g. "bee4".
+  for (const [spokenFile, file] of fileWords.entries()) {
+    if (!cleaned.startsWith(spokenFile)) continue;
+    const rest = cleaned.slice(spokenFile.length);
+    const rank = normalizeRank(rest);
+    if (rank) return `${file}${rank}`;
+  }
+
+  return "";
+}
+
 function toSquare(fileToken, rankToken) {
   const file = normalizeFile(fileToken);
   const rank = normalizeRank(rankToken);
@@ -68,10 +84,19 @@ function toSquare(fileToken, rankToken) {
 
 function findSquares(tokens) {
   const squares = [];
-  for (let index = 0; index < tokens.length - 1; index += 1) {
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const compact = normalizeCompactSquare(tokens[index]);
+    if (compact) {
+      squares.push({ square: compact, index, width: 1 });
+      continue;
+    }
+
+    if (index >= tokens.length - 1) continue;
     const square = toSquare(tokens[index], tokens[index + 1]);
-    if (square) squares.push({ square, index });
+    if (square) squares.push({ square, index, width: 2 });
   }
+
   return squares;
 }
 
@@ -127,7 +152,7 @@ export function sanFromSpeech(raw) {
     return appendSuffix(`${piece}${isCapture ? "x" : ""}${destination}${promo}`, hasCheck, hasMate);
   }
 
-  // Pawn capture: "d takes e five" / "dee takes e five" -> dxe5.
+  // Pawn capture: "d takes e five" / "dee takes e5" -> dxe5.
   if (isCapture && squares.length) {
     const captureIndex = tokens.findIndex((token) => captureWords.has(token));
     const fromFile = normalizeFile(tokens[Math.max(0, captureIndex - 1)]);
@@ -137,13 +162,13 @@ export function sanFromSpeech(raw) {
     }
   }
 
-  // Pawn move: "e four", "ee four", etc.
+  // Pawn move: "e four", "e4", "ee four", etc.
   if (squares.length) {
-    const destination = squares[squares.length - 1].square;
+    const lastSquare = squares[squares.length - 1];
+    const destination = lastSquare.square;
     if (!promo) {
-      const lastSquare = squares[squares.length - 1];
-      const afterRank = tokens[lastSquare.index + 2];
-      if (promoWords.has(afterRank)) promo = `=${promoWords.get(afterRank)}`;
+      const afterSquare = tokens[lastSquare.index + lastSquare.width];
+      if (promoWords.has(afterSquare)) promo = `=${promoWords.get(afterSquare)}`;
     }
     return appendSuffix(`${destination}${promo}`, hasCheck, hasMate);
   }
