@@ -8,7 +8,6 @@ const DEFAULT_SETTINGS = Object.freeze({
   accent: "brown",
   textSize: "normal",
   font: "system",
-  boardSize: "medium",
 });
 
 const STORAGE_KEYS = Object.freeze({
@@ -16,7 +15,6 @@ const STORAGE_KEYS = Object.freeze({
   accent: "blindfold-ui-accent",
   textSize: "blindfold-ui-text-size",
   font: "blindfold-ui-font",
-  boardSize: "blindfold-ui-board-size",
 });
 
 const ALLOWED_VALUES = Object.freeze({
@@ -24,7 +22,6 @@ const ALLOWED_VALUES = Object.freeze({
   accent: new Set(["brown", "blue", "green", "burgundy"]),
   textSize: new Set(["small", "normal", "large", "xlarge"]),
   font: new Set(["system", "serif", "sans", "mono"]),
-  boardSize: new Set(["small", "medium", "large"]),
 });
 
 const LABELS = Object.freeze({
@@ -35,7 +32,6 @@ const LABELS = Object.freeze({
     accent: "Accent color",
     textSize: "Text size",
     font: "Font",
-    boardSize: "Board size",
     reset: "Reset settings",
     close: "Close",
     saved: "Appearance settings are stored locally in this browser.",
@@ -43,7 +39,6 @@ const LABELS = Object.freeze({
     accents: { brown: "Brown", blue: "Blue", green: "Green", burgundy: "Burgundy" },
     textSizes: { small: "Small", normal: "Normal", large: "Large", xlarge: "Extra large" },
     fonts: { system: "System", serif: "Serif", sans: "Sans-serif", mono: "Monospace" },
-    boardSizes: { small: "Small", medium: "Medium", large: "Large" },
   },
   el: {
     heading: "Ρυθμίσεις",
@@ -52,7 +47,6 @@ const LABELS = Object.freeze({
     accent: "Χρώμα έμφασης",
     textSize: "Μέγεθος κειμένου",
     font: "Γραμματοσειρά",
-    boardSize: "Μέγεθος σκακιέρας",
     reset: "Επαναφορά ρυθμίσεων",
     close: "Κλείσιμο",
     saved: "Οι ρυθμίσεις εμφάνισης αποθηκεύονται τοπικά σε αυτό το πρόγραμμα περιήγησης.",
@@ -60,7 +54,6 @@ const LABELS = Object.freeze({
     accents: { brown: "Καφέ", blue: "Μπλε", green: "Πράσινο", burgundy: "Μπορντό" },
     textSizes: { small: "Μικρό", normal: "Κανονικό", large: "Μεγάλο", xlarge: "Πολύ μεγάλο" },
     fonts: { system: "Συστήματος", serif: "Με πατούρες", sans: "Χωρίς πατούρες", mono: "Σταθερού πλάτους" },
-    boardSizes: { small: "Μικρή", medium: "Μεσαία", large: "Μεγάλη" },
   },
 });
 
@@ -81,7 +74,7 @@ function applySettings(settings) {
   root.dataset.uiAccent = settings.accent;
   root.dataset.uiTextSize = settings.textSize;
   root.dataset.uiFont = settings.font;
-  root.dataset.uiBoardSize = settings.boardSize;
+  root.dataset.uiBoardSize = "medium";
 }
 
 function saveSettings(settings) {
@@ -166,13 +159,6 @@ export default function SettingsPanel({ isOpen, language, onClose }) {
             onChange={updateSetting("font")}
             options={copy.fonts}
             value={settings.font}
-          />
-          <SettingsSelect
-            id="ui-board-size-select"
-            label={copy.boardSize}
-            onChange={updateSetting("boardSize")}
-            options={copy.boardSizes}
-            value={settings.boardSize}
           />
         </div>
 
