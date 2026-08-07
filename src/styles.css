@@ -92,14 +92,9 @@ li {
 
 .app-shell {
   min-height: 100vh;
-  padding-top: 9.5rem;
-  padding-bottom: 7.75rem;
 }
 
 .app-header {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 40;
   padding: 0.9rem 0;
   border-bottom: 1px solid var(--border);
   background: rgb(255 255 255 / 0.94);
@@ -300,7 +295,7 @@ li {
 .game-panel {
   margin: 0;
   padding: clamp(1.15rem, 3vw, 2rem);
-  scroll-margin-top: 10rem;
+  scroll-margin-top: 1rem;
 }
 
 .page-heading {
@@ -316,10 +311,8 @@ li {
   color: var(--ink-soft);
 }
 
-.control-section,
-.moves-panel,
-.status-panel {
-  scroll-margin-top: 10rem;
+.control-section {
+  scroll-margin-top: 1rem;
 }
 
 .control-section {
@@ -436,9 +429,6 @@ input {
 }
 
 .app-footer {
-  position: fixed;
-  inset: auto 0 0;
-  z-index: 40;
   padding: 0.9rem 0 1rem;
   border-top: 1px solid var(--border);
   background: rgb(255 251 235 / 0.97);
@@ -523,11 +513,6 @@ input {
 }
 
 @media (max-width: 760px) {
-  .app-shell {
-    padding-top: 17.5rem;
-    padding-bottom: 10rem;
-  }
-
   .app-header-top,
   .navigation-row,
   .app-main,
@@ -566,12 +551,5 @@ input {
 
   .move-form button {
     width: 100%;
-  }
-
-  .game-panel,
-  .control-section,
-  .moves-panel,
-  .status-panel {
-    scroll-margin-top: 18rem;
   }
 }

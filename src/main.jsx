@@ -5,9 +5,7 @@ import globalStyles from "./styles.css?raw";
 import boardStyles from "./board-visibility.css?raw";
 import evaluationStyles from "./evaluation-panel.css?raw";
 import settingsStyles from "./settings-panel.css?raw";
-import layoutFlowStyles from "./layout-flow.css?raw";
 import "./styles.css";
-import "./layout-flow.css";
 
 function installBundledStyleFallback() {
   const styleId = "blindfold-bundled-styles";
@@ -28,7 +26,6 @@ function installBundledStyleFallback() {
     boardStyles,
     evaluationStyles,
     settingsStyles,
-    layoutFlowStyles,
   ].join("\n\n");
   document.head.appendChild(style);
 }
