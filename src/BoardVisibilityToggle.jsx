@@ -235,7 +235,7 @@ export default function BoardVisibilityToggle() {
           host = document.createElement("section");
           host.dataset.boardVisibilityHost = "true";
           host.className = "board-visibility-panel";
-          movesPanel.insertAdjacentElement("afterend", host);
+          movesPanel.insertAdjacentElement("beforebegin", host);
         }
 
         setState((previous) => {
