@@ -5,19 +5,21 @@ import { sanFromSpeech } from "./voice/sanFromSpeech.js";
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const STOCKFISH_WORKER_URL = "/stockfish-17.1-lite-single-03e3232.js";
 const ENGINE_MOVE_TIME_MS = 1000;
-const APP_VERSION = "v1.2.2_20260807";
+const APP_VERSION = "v1.2.3_20260807";
 
 const DIFFICULTY_LEVELS = [
-  { id: 1, nameEn: "Beginner", nameEl: "Αρχάριος", elo: 1320 },
-  { id: 2, nameEn: "Very easy", nameEl: "Πολύ εύκολο", elo: 1400 },
-  { id: 3, nameEn: "Easy", nameEl: "Εύκολο", elo: 1500 },
-  { id: 4, nameEn: "Casual", nameEl: "Χαλαρό", elo: 1650 },
-  { id: 5, nameEn: "Medium", nameEl: "Μέτριο", elo: 1800 },
-  { id: 6, nameEn: "Advanced", nameEl: "Προχωρημένο", elo: 2000 },
-  { id: 7, nameEn: "Hard", nameEl: "Δύσκολο", elo: 2200 },
-  { id: 8, nameEn: "Very hard", nameEl: "Πολύ δύσκολο", elo: 2500 },
-  { id: 9, nameEn: "Expert", nameEl: "Ειδικός", elo: 2800 },
-  { id: 10, nameEn: "Maximum", nameEl: "Μέγιστο", elo: 3190 },
+  { id: 1, nameEn: "Beginner", nameEl: "Αρχάριος", elo: 1320, displayElo: "1320" },
+  { id: 2, nameEn: "Novice", nameEl: "Νέος παίκτης", elo: 1400, displayElo: "1400" },
+  { id: 3, nameEn: "Intermediate", nameEl: "Μέτριος", elo: 1500, displayElo: "1500" },
+  { id: 4, nameEn: "Club Player", nameEl: "Παίκτης συλλόγου", elo: 1650, displayElo: "1650" },
+  { id: 5, nameEn: "Strong Club Player", nameEl: "Ισχυρός παίκτης συλλόγου", elo: 1800, displayElo: "1800" },
+  { id: 6, nameEn: "Expert", nameEl: "Expert", elo: 2000, displayElo: "2000" },
+  { id: 7, nameEn: "Candidate Master (CM) level", nameEl: "Επίπεδο Candidate Master (CM)", elo: 2200, displayElo: "2200" },
+  { id: 8, nameEn: "FIDE Master (FM) level", nameEl: "Επίπεδο FIDE Master (FM)", elo: 2300, displayElo: "2300" },
+  { id: 9, nameEn: "International Master (IM) level", nameEl: "Επίπεδο International Master (IM)", elo: 2400, displayElo: "2400" },
+  { id: 10, nameEn: "Grandmaster (GM) level", nameEl: "Επίπεδο Grandmaster (GM)", elo: 2500, displayElo: "2500" },
+  { id: 11, nameEn: "Super-GM level", nameEl: "Επίπεδο Super-GM", elo: 2700, displayElo: "2700" },
+  { id: 12, nameEn: "Engines Level", nameEl: "Επίπεδο μηχανών", elo: 3190, displayElo: "2900+" },
 ];
 
 const COPY = {
@@ -40,7 +42,7 @@ const COPY = {
     playIntro: "Enter moves in SAN, use voice input, or play directly on the optional board.",
     difficulty: "Stockfish difficulty",
     approximateEngineElo: "Approximate engine Elo",
-    officialLimit: "official Stockfish strength limit",
+    officialLimit: "Stockfish UCI_Elo strength limit",
     locked: "Locked for this game",
     newGame: "New game",
     resign: "Resign",
@@ -62,7 +64,7 @@ const COPY = {
     guide2: "Enter a legal SAN move, such as e4, Nf3, Bxe6 or O-O, or use the visible board.",
     guide3: "Listen to the Stockfish reply and keep the position in your memory.",
     guide4: "Press New game to reset the position and unlock the difficulty selection.",
-    eloNotice: "The displayed Elo is an approximate Stockfish engine rating, not a FIDE or online-platform rating.",
+    eloNotice: "The Elo is Stockfish engine Elo. The lower labels are informal strength categories; CM/FM/IM/GM labels mean comparable rating level only, not an official title.",
     localNotice: "Language and difficulty settings are stored locally in this browser. The game and Stockfish run on your device.",
     learnMore: "Learn more",
     rights: "All rights reserved.",
@@ -92,7 +94,7 @@ const COPY = {
     playIntro: "Γράψε κινήσεις SAN, χρησιμοποίησε φωνητική εισαγωγή ή παίξε στην προαιρετική σκακιέρα.",
     difficulty: "Δυσκολία Stockfish",
     approximateEngineElo: "Κατά προσέγγιση engine Elo",
-    officialLimit: "επίσημος περιορισμός δύναμης Stockfish",
+    officialLimit: "περιορισμός δύναμης Stockfish UCI_Elo",
     locked: "Κλειδωμένο για αυτή την παρτίδα",
     newGame: "Νέα παρτίδα",
     resign: "Παραίτηση",
@@ -114,7 +116,7 @@ const COPY = {
     guide2: "Γράψε νόμιμη κίνηση SAN, όπως e4, Nf3, Bxe6 ή O-O, ή χρησιμοποίησε τη σκακιέρα.",
     guide3: "Άκουσε την απάντηση του Stockfish και κράτησε τη θέση στη μνήμη σου.",
     guide4: "Πάτησε Νέα παρτίδα για επαναφορά και ξεκλείδωμα της δυσκολίας.",
-    eloNotice: "Το Elo που εμφανίζεται είναι κατά προσέγγιση rating της μηχανής Stockfish και όχι FIDE ή online πλατφόρμας.",
+    eloNotice: "Το Elo είναι engine Elo του Stockfish. Οι χαμηλότερες κατηγορίες είναι ανεπίσημες· οι ενδείξεις CM/FM/IM/GM σημαίνουν αντίστοιχο επίπεδο rating και όχι επίσημο τίτλο.",
     localNotice: "Οι ρυθμίσεις γλώσσας και δυσκολίας αποθηκεύονται τοπικά σε αυτόν τον browser. Η παρτίδα και το Stockfish εκτελούνται στη συσκευή σου.",
     learnMore: "Μάθε περισσότερα",
     rights: "Με επιφύλαξη παντός δικαιώματος.",
@@ -257,7 +259,7 @@ export default function AppV2() {
   const [pendingSan, setPendingSan] = useState("");
   const [difficulty, setDifficulty] = useState(() => {
     const saved = Number(localStorage.getItem("blindfold-difficulty"));
-    return saved >= 1 && saved <= 10 ? saved : 5;
+    return saved >= 1 && saved <= 12 ? saved : 5;
   });
   const [gameStarted, setGameStarted] = useState(false);
   const [gameEnded, setGameEnded] = useState(false);
@@ -446,8 +448,8 @@ export default function AppV2() {
 
     setBusy(true);
     setStatus(language === "el"
-      ? `Το Stockfish σκέφτεται — ${profileName}, περίπου ${profile.elo} Elo...`
-      : `Engine thinking — ${profileName}, approximately ${profile.elo} Elo...`);
+      ? `Το Stockfish σκέφτεται — ${profileName}, περίπου ${profile.displayElo} Elo...`
+      : `Engine thinking — ${profileName}, approximately ${profile.displayElo} Elo...`);
 
     engine.postMessage("stop");
     engine.postMessage("setoption name UCI_LimitStrength value true");
@@ -610,8 +612,8 @@ export default function AppV2() {
 
     const name = language === "el" ? profile.nameEl : profile.nameEn;
     setStatus(language === "el"
-      ? `Επιλέχθηκε ${name} — περίπου ${profile.elo} engine Elo.`
-      : `Selected ${name} — approximately ${profile.elo} engine Elo.`);
+      ? `Επιλέχθηκε ${name} — περίπου ${profile.displayElo} engine Elo.`
+      : `Selected ${name} — approximately ${profile.displayElo} engine Elo.`);
   }
 
   function resignGame() {
@@ -646,8 +648,8 @@ export default function AppV2() {
     setMode("MOVE");
     setPendingSan("");
     setStatus(language === "el"
-      ? `Νέα παρτίδα — ${selectedProfileName}, περίπου ${selectedProfile.elo} engine Elo. Γράψε κίνηση SAN ή πάτησε Έναρξη φωνής.`
-      : `New game — ${selectedProfileName}, approximately ${selectedProfile.elo} engine Elo. Enter a SAN move or press Start.`);
+      ? `Νέα παρτίδα — ${selectedProfileName}, περίπου ${selectedProfile.displayElo} engine Elo. Γράψε κίνηση SAN ή πάτησε Έναρξη φωνής.`
+      : `New game — ${selectedProfileName}, approximately ${selectedProfile.displayElo} engine Elo. Enter a SAN move or press Start.`);
     speak("New game. Your move.");
   }
 
@@ -742,12 +744,12 @@ export default function AppV2() {
             >
               {DIFFICULTY_LEVELS.map((level) => (
                 <option key={level.id} value={level.id}>
-                  {language === "el" ? level.nameEl : level.nameEn} — ≈{level.elo} Elo
+                  {language === "el" ? level.nameEl : level.nameEn} — ≈{level.displayElo} Elo
                 </option>
               ))}
             </select>
             <div className="field-help">
-              {copy.approximateEngineElo}: ≈{selectedProfile.elo} · {copy.officialLimit}
+              {copy.approximateEngineElo}: ≈{selectedProfile.displayElo} · {copy.officialLimit}
               {gameStarted ? ` · ${copy.locked}` : ""}
             </div>
           </section>
