@@ -1,9 +1,49 @@
 import { normalizeStockfishElo } from "./difficulty.js";
 
 const BEST_MOVE_PATTERN = /^bestmove\s+(\(none\)|[a-h][1-8][a-h][1-8][qrbn]?)(?:\s+ponder\s+[a-h][1-8][a-h][1-8][qrbn]?)?\s*$/;
+const MULTIPV_MOVE_PATTERN = /\bmultipv\s+(\d+)\b.*\bpv\s+([a-h][1-8][a-h][1-8][qrbn]?)\b/;
+
+// Stockfish's UCI_Elo bottoms out around its internal 1320-strength setting.
+// The first six app levels therefore use a wider MultiPV search and deliberately
+// choose among good-but-not-best candidates. Higher levels keep Stockfish's
+// native UCI_LimitStrength/UCI_Elo behaviour.
+const TRAINING_PRESETS = Object.freeze([
+  { maxElo: 1320, multiPv: 12, bestMoveProbability: 0.08, alternativeBias: 0 },
+  { maxElo: 1400, multiPv: 10, bestMoveProbability: 0.15, alternativeBias: 0.25 },
+  { maxElo: 1500, multiPv: 8, bestMoveProbability: 0.28, alternativeBias: 0.6 },
+  { maxElo: 1650, multiPv: 6, bestMoveProbability: 0.45, alternativeBias: 1 },
+  { maxElo: 1800, multiPv: 5, bestMoveProbability: 0.62, alternativeBias: 1.5 },
+  { maxElo: 2000, multiPv: 4, bestMoveProbability: 0.78, alternativeBias: 2.2 },
+]);
+
+function getStrengthPreset(elo) {
+  const trainingPreset = TRAINING_PRESETS.find((preset) => elo <= preset.maxElo);
+  if (trainingPreset) {
+    return {
+      mode: "training",
+      ...trainingPreset,
+    };
+  }
+
+  return {
+    mode: "uci-elo",
+    multiPv: 1,
+    bestMoveProbability: 1,
+    alternativeBias: 0,
+  };
+}
 
 export function parseBestMove(line) {
   return BEST_MOVE_PATTERN.exec(String(line || "").trim())?.[1] || null;
+}
+
+export function parseMultiPvMove(line) {
+  const match = MULTIPV_MOVE_PATTERN.exec(String(line || "").trim());
+  if (!match) return null;
+  return {
+    rank: Number(match[1]),
+    uci: match[2],
+  };
 }
 
 export class GameplayStockfishController {
@@ -19,6 +59,7 @@ export class GameplayStockfishController {
     this.defaultMoveTimeMs = Math.max(1, Math.round(options.moveTimeMs || 1000));
     this.responseTimeoutMs = Math.max(1, Math.round(options.responseTimeoutMs || 30000));
     this.stopTimeoutMs = Math.max(1, Math.round(options.stopTimeoutMs || 10000));
+    this.random = typeof options.random === "function" ? options.random : Math.random;
 
     this.phase = "created";
     this.pendingSearch = null;
@@ -54,10 +95,13 @@ export class GameplayStockfishController {
       throw new TypeError("A valid single-line FEN is required.");
     }
 
+    const normalizedElo = normalizeStockfishElo(elo);
     const request = {
       id: this.nextSearchId,
       fen: normalizedFen,
-      elo: normalizeStockfishElo(elo),
+      elo: normalizedElo,
+      strength: getStrengthPreset(normalizedElo),
+      candidates: new Map(),
       moveTimeMs: Math.max(1, Math.round(Number(moveTimeMs) || this.defaultMoveTimeMs)),
       cancelled: false,
     };
@@ -114,6 +158,14 @@ export class GameplayStockfishController {
       return;
     }
 
+    if (line.startsWith("info ") && this.activeSearch?.strength.mode === "training") {
+      const candidate = parseMultiPvMove(line);
+      if (candidate && candidate.rank <= this.activeSearch.strength.multiPv) {
+        this.activeSearch.candidates.set(candidate.rank, candidate.uci);
+      }
+      return;
+    }
+
     if (line.startsWith("bestmove")) {
       const uci = parseBestMove(line);
       if (!uci) {
@@ -140,6 +192,7 @@ export class GameplayStockfishController {
       this.phase = "idle";
 
       if (request && !request.cancelled && !this.resetPending && !this.pendingSearch) {
+        request.candidates.clear();
         this.activeSearch = request;
         this.phase = "searching";
         this.send(`position fen ${request.fen}`);
@@ -161,18 +214,53 @@ export class GameplayStockfishController {
     }
   }
 
+  selectTrainingMove(request, bestMove) {
+    if (request.strength.mode !== "training") return bestMove;
+
+    const rankedMoves = [...request.candidates.entries()]
+      .sort(([rankA], [rankB]) => rankA - rankB)
+      .map(([, uci]) => uci);
+
+    const uniqueMoves = [];
+    const seen = new Set();
+    for (const uci of [bestMove, ...rankedMoves]) {
+      if (!uci || uci === "(none)" || seen.has(uci)) continue;
+      seen.add(uci);
+      uniqueMoves.push(uci);
+    }
+
+    if (uniqueMoves.length <= 1) return bestMove;
+    if (this.random() < request.strength.bestMoveProbability) return uniqueMoves[0];
+
+    const alternatives = uniqueMoves.slice(1);
+    const bias = request.strength.alternativeBias;
+    const weights = alternatives.map((_, index) => (
+      bias === 0 ? 1 : 1 / Math.pow(index + 1, bias)
+    ));
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    let pick = this.random() * totalWeight;
+
+    for (let index = 0; index < alternatives.length; index += 1) {
+      pick -= weights[index];
+      if (pick <= 0) return alternatives[index];
+    }
+
+    return alternatives[alternatives.length - 1] || bestMove;
+  }
+
   handleBestMove(uci) {
     if (!this.activeSearch || (this.phase !== "searching" && this.phase !== "stopping")) {
       return;
     }
 
     const request = this.activeSearch;
+    const selectedUci = this.selectTrainingMove(request, uci);
     this.clearWatchdog();
     this.activeSearch = null;
     this.phase = "idle";
 
     if (!request.cancelled && !this.resetPending) {
-      this.onBestMove(uci, request);
+      this.onBestMove(selectedUci, request);
     }
 
     this.pump();
@@ -203,9 +291,18 @@ export class GameplayStockfishController {
     this.pendingSearch = null;
     this.preparingSearch = request;
     this.phase = "preparing";
-    this.send("setoption name UCI_LimitStrength value true");
-    this.send(`setoption name UCI_Elo value ${request.elo}`);
-    this.send("setoption name MultiPV value 1");
+
+    if (request.strength.mode === "training") {
+      this.send("setoption name UCI_LimitStrength value false");
+      this.send("setoption name Skill Level value 20");
+      this.send(`setoption name MultiPV value ${request.strength.multiPv}`);
+    } else {
+      this.send("setoption name Skill Level value 20");
+      this.send("setoption name UCI_LimitStrength value true");
+      this.send(`setoption name UCI_Elo value ${request.elo}`);
+      this.send("setoption name MultiPV value 1");
+    }
+
     this.send("isready");
     this.armWatchdog("Stockfish did not apply the requested strength.");
   }
