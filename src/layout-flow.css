@@ -1,0 +1,33 @@
+.app-shell {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.app-header,
+.app-footer {
+  position: static;
+  inset: auto;
+}
+
+.game-panel,
+.control-section,
+.moves-panel,
+.status-panel,
+.board-visibility-panel {
+  scroll-margin-top: 1rem;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .game-panel,
+  .control-section,
+  .moves-panel,
+  .status-panel,
+  .board-visibility-panel {
+    scroll-margin-top: 1rem;
+  }
+}
