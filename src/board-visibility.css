@@ -22,10 +22,18 @@
 }
 
 .board-turn-label {
-  margin: 0 0 0.55rem;
+  margin: 0 0 0.35rem;
   color: var(--ink-soft);
   font-size: 0.86rem;
   font-weight: 700;
+  text-align: center;
+}
+
+.board-interaction-help {
+  min-height: 1.35em;
+  margin: 0 0 0.65rem;
+  color: var(--muted);
+  font-size: 0.82rem;
   text-align: center;
 }
 
@@ -41,22 +49,68 @@
   box-shadow: 0 12px 28px rgb(15 23 42 / 0.16);
 }
 
-.chessboard-square {
+.chessboard .chessboard-square {
   position: relative;
   display: grid;
   min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
   place-items: center;
   aspect-ratio: 1;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.chessboard-square.is-light {
+.chessboard .chessboard-square.is-light {
   background: #fef3c7;
   color: #451a03;
 }
 
-.chessboard-square.is-dark {
+.chessboard .chessboard-square.is-dark {
   background: #b45309;
   color: #fff7ed;
+}
+
+.chessboard .chessboard-square:focus-visible {
+  z-index: 4;
+  outline: 3px solid #2563eb;
+  outline-offset: -3px;
+}
+
+.chessboard .chessboard-square.is-selected {
+  z-index: 3;
+  box-shadow: inset 0 0 0 4px #2563eb;
+}
+
+.chessboard .chessboard-square.is-legal-target::after {
+  position: absolute;
+  z-index: 2;
+  width: 26%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 0.58);
+  content: "";
+  pointer-events: none;
+}
+
+.chessboard .chessboard-square.is-legal-target.has-piece::after {
+  width: 78%;
+  background: transparent;
+  border: 4px solid rgb(37 99 235 / 0.72);
+}
+
+.chessboard .chessboard-square[draggable="true"] {
+  cursor: grab;
+}
+
+.chessboard .chessboard-square[draggable="true"]:active {
+  cursor: grabbing;
 }
 
 .chessboard-piece {
@@ -69,6 +123,8 @@
   font-synthesis: none;
   line-height: 1;
   forced-color-adjust: none;
+  pointer-events: none;
+  user-select: none;
 }
 
 .chessboard-piece.is-white-piece {
@@ -103,6 +159,8 @@
   font-weight: 800;
   line-height: 1;
   opacity: 0.8;
+  pointer-events: none;
+  user-select: none;
 }
 
 .rank-label {
@@ -122,5 +180,9 @@
 
   .chessboard-piece {
     font-size: clamp(1.45rem, 9.5vw, 3.2rem);
+  }
+
+  .chessboard .chessboard-square.is-selected {
+    box-shadow: inset 0 0 0 3px #2563eb;
   }
 }
