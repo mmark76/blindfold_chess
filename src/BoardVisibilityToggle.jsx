@@ -173,6 +173,38 @@ function moveFromSquares(fen, from, to) {
   }
 }
 
+function setPieceDragImage(event) {
+  const pieceElement = event.currentTarget.querySelector(".chessboard-piece");
+  if (!pieceElement || !event.dataTransfer) return;
+
+  const dragImage = pieceElement.cloneNode(true);
+  dragImage.setAttribute("aria-hidden", "true");
+  Object.assign(dragImage.style, {
+    position: "fixed",
+    left: "-9999px",
+    top: "-9999px",
+    display: "block",
+    width: "auto",
+    height: "auto",
+    margin: "0",
+    padding: "0",
+    border: "0",
+    background: "transparent",
+    boxShadow: "none",
+    pointerEvents: "none",
+    zIndex: "2147483647",
+  });
+
+  document.body.appendChild(dragImage);
+  const rect = dragImage.getBoundingClientRect();
+  event.dataTransfer.setDragImage(
+    dragImage,
+    Math.max(1, rect.width / 2),
+    Math.max(1, rect.height / 2),
+  );
+  window.setTimeout(() => dragImage.remove(), 0);
+}
+
 export default function BoardVisibilityToggle() {
   const [showBoard, setShowBoard] = useState(getInitialVisibility);
   const [selectedSquare, setSelectedSquare] = useState("");
@@ -369,6 +401,7 @@ export default function BoardVisibilityToggle() {
 
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", square);
+    setPieceDragImage(event);
     setSelectedSquare(square);
     setInteractionMessage(
       isGreek ? `Μετακίνησε το ${square} σε νόμιμο τετράγωνο.` : `Drag ${square} to a legal square.`,
