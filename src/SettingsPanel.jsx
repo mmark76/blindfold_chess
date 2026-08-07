@@ -74,7 +74,7 @@ function applySettings(settings) {
   root.dataset.uiAccent = settings.accent;
   root.dataset.uiTextSize = settings.textSize;
   root.dataset.uiFont = settings.font;
-  root.dataset.uiBoardSize = "medium";
+  root.dataset.uiBoardSize = "large";
 }
 
 function saveSettings(settings) {
