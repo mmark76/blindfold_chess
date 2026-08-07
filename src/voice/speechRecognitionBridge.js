@@ -68,9 +68,9 @@ function createSyntheticEvent(event) {
   };
 
   return new Proxy(event, {
-    get(target, property, receiver) {
+    get(target, property) {
       if (property === "results") return syntheticResults;
-      return Reflect.get(target, property, receiver);
+      return Reflect.get(target, property, target);
     },
   });
 }
@@ -102,7 +102,14 @@ if (NativeSpeechRecognition && !window.__blindfoldSpeechRecognitionEnhanced) {
   }
 
   EnhancedSpeechRecognition.prototype = NativeSpeechRecognition.prototype;
-  window.SpeechRecognition = EnhancedSpeechRecognition;
-  window.webkitSpeechRecognition = EnhancedSpeechRecognition;
+
+  try {
+    window.SpeechRecognition = EnhancedSpeechRecognition;
+  } catch {}
+
+  try {
+    window.webkitSpeechRecognition = EnhancedSpeechRecognition;
+  } catch {}
+
   window.__blindfoldSpeechRecognitionEnhanced = true;
 }
