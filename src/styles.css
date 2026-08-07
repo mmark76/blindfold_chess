@@ -12,8 +12,8 @@
   --ink: #451a03;
   --ink-soft: #475569;
   --muted: #64748b;
-  --accent: #d97706;
-  --accent-dark: #92400e;
+  --accent: #9a3412;
+  --accent-dark: #7c2d12;
   --accent-soft: #fef3c7;
   --border: #cbd5e1;
   --shadow: 0 12px 32px rgb(15 23 42 / 0.08);
@@ -230,6 +230,16 @@ li {
   50% { opacity: 1; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .engine-dot.is-checking {
+    animation: none;
+  }
+}
+
 .language-switch {
   display: inline-flex;
   gap: 0.2rem;
@@ -279,8 +289,7 @@ li {
   padding: 2rem 0;
 }
 
-.game-panel,
-.guide-panel {
+.game-panel {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 1.2rem;
@@ -294,25 +303,16 @@ li {
   scroll-margin-top: 10rem;
 }
 
-.guide-panel {
-  margin: 1.25rem 0 0;
-  padding: clamp(1.15rem, 3vw, 1.7rem);
-  scroll-margin-top: 10rem;
-}
-
 .page-heading {
   margin-bottom: 1.25rem;
 }
 
-.page-heading h2,
-.guide-panel h2 {
+.page-heading h2 {
   margin: 0;
   font-size: clamp(1.7rem, 4vw, 2.3rem);
 }
 
-.page-heading p:last-child,
-.guide-panel > p,
-.guide-panel li {
+.page-heading p:last-child {
   color: var(--ink-soft);
 }
 
@@ -482,7 +482,7 @@ input {
 .build-version {
   display: block;
   margin-top: 0.35rem;
-  color: #94a3b8;
+  color: #64748b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.68rem;
 }
@@ -556,8 +556,7 @@ input {
     padding-top: 0.75rem;
   }
 
-  .game-panel,
-  .guide-panel {
+  .game-panel {
     border-radius: 0.95rem;
   }
 
@@ -570,7 +569,6 @@ input {
   }
 
   .game-panel,
-  .guide-panel,
   .control-section,
   .moves-panel,
   .status-panel {

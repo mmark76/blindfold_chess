@@ -73,8 +73,8 @@
 }
 
 :root[data-ui-accent="brown"] {
-  --accent: #d97706;
-  --accent-dark: #92400e;
+  --accent: #9a3412;
+  --accent-dark: #7c2d12;
   --accent-soft: #fef3c7;
 }
 
@@ -189,7 +189,7 @@ html[data-ui-theme="dark"] .evaluation-lines p {
 }
 
 html[data-ui-theme="dark"] .build-version {
-  color: #64748b;
+  color: #94a3b8;
 }
 
 html[data-ui-accent] button:focus-visible,

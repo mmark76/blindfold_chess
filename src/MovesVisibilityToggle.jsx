@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { Chess } from "chess.js";
+import { getStoredBoolean, setStoredValue } from "./storage.js";
 
 const STORAGE_KEY = "blindfold-show-moves";
 const EMPTY_MOVE_TEXTS = new Set(["", "No moves yet.", "Δεν υπάρχουν κινήσεις ακόμη."]);
 
 function getInitialVisibility() {
-  return localStorage.getItem(STORAGE_KEY) !== "false";
+  return getStoredBoolean(STORAGE_KEY, true);
 }
 
 function sanMovesFromText(text) {
@@ -71,12 +71,12 @@ function moveLinesFromMoves(moves) {
   return moveLines;
 }
 
-function createPgn(sanText) {
+function createPgn(sanText, explicitResult) {
   const moves = sanMovesFromText(sanText);
   if (moves.length === 0) return null;
 
   const chess = gameFromSanText(sanText);
-  const result = gameResult(chess);
+  const result = explicitResult || gameResult(chess);
   const date = cyprusDateParts();
   const moveLines = moveLinesFromMoves(moves);
   const headers = [
@@ -92,8 +92,8 @@ function createPgn(sanText) {
   return `${headers.join("\n")}\n\n${moveLines.join("\n")} ${result}\n`;
 }
 
-function downloadPgn(sanText) {
-  const pgn = createPgn(sanText);
+function downloadPgn(sanText, explicitResult) {
+  const pgn = createPgn(sanText, explicitResult);
   if (!pgn) return;
 
   const date = cyprusDateParts();
@@ -119,12 +119,12 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function openPrintableGame(sanText, language, autoPrint = false) {
+function openPrintableGame(sanText, language, autoPrint = false, explicitResult = null) {
   const moves = sanMovesFromText(sanText);
   if (moves.length === 0) return;
 
   const chess = gameFromSanText(sanText);
-  const result = gameResult(chess);
+  const result = explicitResult || gameResult(chess);
   const date = cyprusDateParts();
   const isGreek = language === "el";
   const labels = isGreek
@@ -161,7 +161,9 @@ function openPrintableGame(sanText, language, autoPrint = false) {
   printableWindow.opener = null;
 
   const formattedDate = `${date.year}-${date.month}-${date.day} ${date.hour}:${date.minute}`;
-  const moveMarkup = moveLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("");
+  const moveMarkup = moveLines
+    .map((line) => `<li>${escapeHtml(line.replace(/^\d+\.\s*/, ""))}</li>`)
+    .join("");
 
   printableWindow.document.open();
   printableWindow.document.write(`<!doctype html>
@@ -218,154 +220,81 @@ function openPrintableGame(sanText, language, autoPrint = false) {
   printableWindow.document.close();
 
   if (autoPrint) {
-    printableWindow.addEventListener("load", () => printableWindow.print(), { once: true });
-    window.setTimeout(() => printableWindow.print(), 300);
+    let printRequested = false;
+    const requestPrint = () => {
+      if (printRequested || printableWindow.closed) return;
+      printRequested = true;
+      printableWindow.print();
+    };
+
+    printableWindow.addEventListener("load", requestPrint, { once: true });
+    window.setTimeout(requestPrint, 300);
   }
 }
 
-export default function MovesVisibilityToggle() {
+export default function MovesVisibilityToggle({ gameResult: explicitResult, language, sanText }) {
   const [showMoves, setShowMoves] = useState(getInitialVisibility);
-  const [state, setState] = useState({
-    host: null,
-    movesList: null,
-    language: "en",
-    sanText: "",
-  });
 
   useEffect(() => {
-    let animationFrame = 0;
+    setStoredValue(STORAGE_KEY, showMoves);
+  }, [showMoves]);
 
-    const sync = () => {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(() => {
-        const panel = document.querySelector(".moves-panel");
-        const movesList = panel?.querySelector("pre") || null;
-        const language = document.documentElement.lang === "el" ? "el" : "en";
-        const sanText = movesList?.textContent || "";
-
-        if (!panel || !movesList) {
-          setState({ host: null, movesList: null, language, sanText });
-          return;
-        }
-
-        movesList.id = "moves-san-list";
-
-        let host = panel.querySelector("[data-moves-visibility-host]");
-        if (!host) {
-          host = document.createElement("div");
-          host.dataset.movesVisibilityHost = "true";
-          host.style.display = "flex";
-          host.style.flexWrap = "wrap";
-          host.style.justifyContent = "flex-end";
-          host.style.gap = "0.5rem";
-          host.style.marginBottom = "0.65rem";
-          panel.insertBefore(host, movesList);
-        }
-
-        setState((previous) => {
-          if (
-            previous.host === host &&
-            previous.movesList === movesList &&
-            previous.language === language &&
-            previous.sanText === sanText
-          ) {
-            return previous;
-          }
-
-          return { host, movesList, language, sanText };
-        });
-      });
-    };
-
-    sync();
-
-    const rootObserver = new MutationObserver(sync);
-    rootObserver.observe(document.getElementById("root") || document.body, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-
-    const languageObserver = new MutationObserver(sync);
-    languageObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["lang"],
-    });
-
-    return () => {
-      rootObserver.disconnect();
-      languageObserver.disconnect();
-      window.cancelAnimationFrame(animationFrame);
-    };
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, String(showMoves));
-
-    if (state.movesList) {
-      state.movesList.hidden = !showMoves;
-    }
-  }, [showMoves, state.movesList]);
-
-  if (!state.host) return null;
-
-  const isGreek = state.language === "el";
+  const isGreek = language === "el";
   const visibilityLabel = showMoves
     ? isGreek ? "Απόκρυψη κινήσεων" : "Hide moves"
     : isGreek ? "Εμφάνιση κινήσεων" : "Show moves";
   const downloadLabel = isGreek ? "Λήψη παρτίδας" : "Download game";
   const printPreviewLabel = isGreek ? "Προεπισκόπηση εκτύπωσης" : "Print Preview";
   const printLabel = isGreek ? "Εκτύπωση" : "Print";
-  const hasMoves = sanMovesFromText(state.sanText).length > 0;
+  const hasMoves = sanMovesFromText(sanText).length > 0;
 
-  return createPortal(
+  return (
     <>
-      <button
-        aria-controls="moves-san-list"
-        aria-expanded={showMoves}
-        onClick={() => setShowMoves((current) => !current)}
+      <div
+        data-moves-visibility-host="true"
         style={{
-          minHeight: 36,
-          padding: "0.45rem 0.75rem",
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "flex-end",
+          gap: "0.5rem",
+          marginBottom: "0.65rem",
         }}
-        type="button"
       >
-        {visibilityLabel} (SAN)
-      </button>
-      <button
-        disabled={!hasMoves}
-        onClick={() => downloadPgn(state.sanText)}
-        style={{
-          minHeight: 36,
-          padding: "0.45rem 0.75rem",
-        }}
-        type="button"
-      >
-        {downloadLabel} (PGN)
-      </button>
-      <button
-        disabled={!hasMoves}
-        onClick={() => openPrintableGame(state.sanText, state.language)}
-        style={{
-          minHeight: 36,
-          padding: "0.45rem 0.75rem",
-        }}
-        type="button"
-      >
-        {printPreviewLabel}
-      </button>
-      <button
-        disabled={!hasMoves}
-        onClick={() => openPrintableGame(state.sanText, state.language, true)}
-        style={{
-          minHeight: 36,
-          padding: "0.45rem 0.75rem",
-        }}
-        type="button"
-      >
-        {printLabel}
-      </button>
-    </>,
-    state.host,
+        <button
+          aria-controls="moves-san-list"
+          aria-expanded={showMoves}
+          onClick={() => setShowMoves((current) => !current)}
+          style={{ minHeight: 36, padding: "0.45rem 0.75rem" }}
+          type="button"
+        >
+          {visibilityLabel} (SAN)
+        </button>
+        <button
+          disabled={!hasMoves}
+          onClick={() => downloadPgn(sanText, explicitResult)}
+          style={{ minHeight: 36, padding: "0.45rem 0.75rem" }}
+          type="button"
+        >
+          {downloadLabel} (PGN)
+        </button>
+        <button
+          disabled={!hasMoves}
+          onClick={() => openPrintableGame(sanText, language, false, explicitResult)}
+          style={{ minHeight: 36, padding: "0.45rem 0.75rem" }}
+          type="button"
+        >
+          {printPreviewLabel}
+        </button>
+        <button
+          disabled={!hasMoves}
+          onClick={() => openPrintableGame(sanText, language, true, explicitResult)}
+          style={{ minHeight: 36, padding: "0.45rem 0.75rem" }}
+          type="button"
+        >
+          {printLabel}
+        </button>
+      </div>
+      <pre hidden={!showMoves} id="moves-san-list">{sanText}</pre>
+    </>
   );
 }

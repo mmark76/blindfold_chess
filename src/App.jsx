@@ -1,24 +1,28 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Chess } from "chess.js";
+import BoardVisibilityToggle from "./BoardVisibilityToggle.jsx";
+import ConfirmMoveButton from "./ConfirmMoveButton.jsx";
+import EvaluationPanel from "./EvaluationPanel.jsx";
+import ModalDialog from "./ModalDialog.jsx";
+import MovesVisibilityToggle from "./MovesVisibilityToggle.jsx";
+import SettingsPanel from "./SettingsPanel.jsx";
+import { applySanMove, applyUciMove } from "./chess/moves.js";
+import { DIFFICULTY_LEVELS, getDifficultyProfile } from "./engine/difficulty.js";
+import { GameplayStockfishController } from "./engine/GameplayStockfishController.js";
+import {
+  getStoredBoolean,
+  getStoredEnum,
+  getStoredInteger,
+  setStoredValue,
+} from "./storage.js";
 import { sanFromSpeech } from "./voice/sanFromSpeech.js";
+import { interpretConfirmCommand } from "./voice/interpretConfirmCommand.js";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const STOCKFISH_WORKER_URL = "/stockfish-17.1-lite-single-03e3232.js";
-const MATE_SCORE = 100000;
-const APP_VERSION = "v1.2.1_20260806";
-
-const DIFFICULTY_LEVELS = [
-  { id: 1, nameEn: "Beginner", nameEl: "Αρχάριος", skill: 0, depth: 5, nodes: 800, multiPv: 8, maxLoss: 500, bestChance: 0.2, temperature: 500 },
-  { id: 2, nameEn: "Very easy", nameEl: "Πολύ εύκολο", skill: 2, depth: 6, nodes: 1500, multiPv: 8, maxLoss: 400, bestChance: 0.3, temperature: 420 },
-  { id: 3, nameEn: "Easy", nameEl: "Εύκολο", skill: 4, depth: 7, nodes: 3000, multiPv: 8, maxLoss: 300, bestChance: 0.4, temperature: 340 },
-  { id: 4, nameEn: "Casual", nameEl: "Χαλαρό", skill: 6, depth: 8, nodes: 6000, multiPv: 7, maxLoss: 220, bestChance: 0.5, temperature: 260 },
-  { id: 5, nameEn: "Medium", nameEl: "Μέτριο", skill: 8, depth: 9, nodes: 12000, multiPv: 6, maxLoss: 160, bestChance: 0.62, temperature: 190 },
-  { id: 6, nameEn: "Advanced", nameEl: "Προχωρημένο", skill: 10, depth: 10, nodes: 25000, multiPv: 5, maxLoss: 120, bestChance: 0.72, temperature: 140 },
-  { id: 7, nameEn: "Hard", nameEl: "Δύσκολο", skill: 12, depth: 11, nodes: 50000, multiPv: 4, maxLoss: 80, bestChance: 0.82, temperature: 100 },
-  { id: 8, nameEn: "Very hard", nameEl: "Πολύ δύσκολο", skill: 15, depth: 13, nodes: 100000, multiPv: 3, maxLoss: 50, bestChance: 0.9, temperature: 70 },
-  { id: 9, nameEn: "Expert", nameEl: "Ειδικός", skill: 18, depth: 15, nodes: 200000, multiPv: 2, maxLoss: 25, bestChance: 0.96, temperature: 35 },
-  { id: 10, nameEn: "Maximum", nameEl: "Μέγιστο", skill: 20, depth: 18, nodes: 400000, multiPv: 1, maxLoss: 0, bestChance: 1, temperature: 1 },
-];
+const ENGINE_MOVE_TIME_MS = 1000;
+const APP_VERSION = "v1.2.3_20260807";
+const DIFFICULTY_IDS = DIFFICULTY_LEVELS.map((level) => level.id);
 
 const COPY = {
   en: {
@@ -37,11 +41,10 @@ const COPY = {
     guideNav: "How to play",
     trainingEyebrow: "Blindfold training",
     playTitle: "Play Blindfold Chess",
-    playIntro: "Enter moves in SAN or use voice input. The board stays hidden while the app tracks the legal position.",
+    playIntro: "Enter moves in SAN, use voice input, or play directly on the optional board.",
     difficulty: "Stockfish difficulty",
-    skill: "Skill",
-    depth: "depth up to",
-    nodes: "nodes",
+    approximateEngineElo: "Approximate engine Elo",
+    officialLimit: "Stockfish UCI_Elo strength limit",
     locked: "Locked for this game",
     newGame: "New game",
     resign: "Resign",
@@ -59,11 +62,12 @@ const COPY = {
     inputHelp: "Use the keyboard for reliable entry, or voice input when your browser supports it.",
     guideTitle: "How to play",
     guideIntro: "The app validates every move and replies with a local Stockfish move.",
-    guide1: "Choose a difficulty before the first move.",
-    guide2: "Enter a legal SAN move, such as e4, Nf3, Bxe6 or O-O.",
-    guide3: "Listen to the engine reply and keep the position in your memory.",
-    guide4: "Press New game to reset the position and unlock difficulty selection.",
-    localNotice: "Language and difficulty settings are stored locally in this browser. The game and Stockfish run on your device.",
+    guide1: "Choose an approximate engine Elo before the first move.",
+    guide2: "Enter a legal SAN move, such as e4, Nf3, Bxe6 or O-O, or use the visible board.",
+    guide3: "Listen to the Stockfish reply and keep the position in your memory.",
+    guide4: "Press New game to reset the position and unlock the difficulty selection.",
+    eloNotice: "The Elo is Stockfish engine Elo. The lower labels are informal strength categories; CM/FM/IM/GM labels mean comparable rating level only, not an official title.",
+    localNotice: "Language, difficulty, appearance, and panel visibility settings are stored locally in this browser. The game and Stockfish run on your device.",
     learnMore: "Learn more",
     rights: "All rights reserved.",
     license: "License",
@@ -72,6 +76,9 @@ const COPY = {
     copyright: "Copyright protected",
     close: "Close",
     legalInfo: "Legal information",
+    language: "Language",
+    mainNavigation: "Main navigation",
+    utilities: "Utilities",
   },
   el: {
     privateSpace: "Ο προσωπικός σου χώρος σκακιστικής εξάσκησης",
@@ -89,11 +96,10 @@ const COPY = {
     guideNav: "Οδηγίες",
     trainingEyebrow: "Εξάσκηση στα τυφλά",
     playTitle: "Παίξε Blindfold Chess",
-    playIntro: "Πληκτρολόγησε κινήσεις SAN ή χρησιμοποίησε φωνητική εισαγωγή. Η σκακιέρα παραμένει κρυφή και η εφαρμογή παρακολουθεί τη νόμιμη θέση.",
+    playIntro: "Γράψε κινήσεις SAN, χρησιμοποίησε φωνητική εισαγωγή ή παίξε στην προαιρετική σκακιέρα.",
     difficulty: "Δυσκολία Stockfish",
-    skill: "Ικανότητα",
-    depth: "βάθος έως",
-    nodes: "κόμβοι",
+    approximateEngineElo: "Κατά προσέγγιση Elo μηχανής",
+    officialLimit: "όριο ισχύος UCI_Elo του Stockfish",
     locked: "Κλειδωμένο για αυτή την παρτίδα",
     newGame: "Νέα παρτίδα",
     resign: "Παραίτηση",
@@ -108,14 +114,15 @@ const COPY = {
     listening: "Ακρόαση",
     pending: "Αναμονή",
     inputHeading: "Εισαγωγή κίνησης",
-    inputHelp: "Χρησιμοποίησε το πληκτρολόγιο για αξιόπιστη εισαγωγή ή τη φωνή όταν υποστηρίζεται από τον browser.",
+    inputHelp: "Χρησιμοποίησε το πληκτρολόγιο για αξιόπιστη εισαγωγή ή τη φωνή όταν υποστηρίζεται από το πρόγραμμα περιήγησης.",
     guideTitle: "Πώς παίζεται",
     guideIntro: "Η εφαρμογή ελέγχει κάθε κίνηση και απαντά με τοπική κίνηση Stockfish.",
-    guide1: "Επίλεξε δυσκολία πριν από την πρώτη κίνηση.",
-    guide2: "Γράψε νόμιμη κίνηση SAN, όπως e4, Nf3, Bxe6 ή O-O.",
+    guide1: "Επίλεξε κατά προσέγγιση Elo μηχανής πριν από την πρώτη κίνηση.",
+    guide2: "Γράψε νόμιμη κίνηση SAN, όπως e4, Nf3, Bxe6 ή O-O, ή χρησιμοποίησε τη σκακιέρα.",
     guide3: "Άκουσε την απάντηση του Stockfish και κράτησε τη θέση στη μνήμη σου.",
     guide4: "Πάτησε Νέα παρτίδα για επαναφορά και ξεκλείδωμα της δυσκολίας.",
-    localNotice: "Οι ρυθμίσεις γλώσσας και δυσκολίας αποθηκεύονται τοπικά σε αυτόν τον browser. Η παρτίδα και το Stockfish εκτελούνται στη συσκευή σου.",
+    eloNotice: "Το Elo είναι το Elo μηχανής του Stockfish. Οι χαμηλότερες κατηγορίες είναι ανεπίσημες· οι ενδείξεις CM/FM/IM/GM σημαίνουν αντίστοιχο επίπεδο αξιολόγησης και όχι επίσημο τίτλο.",
+    localNotice: "Οι ρυθμίσεις γλώσσας, δυσκολίας, εμφάνισης και ορατότητας πλαισίων αποθηκεύονται τοπικά σε αυτό το πρόγραμμα περιήγησης. Η παρτίδα και το Stockfish εκτελούνται στη συσκευή σου.",
     learnMore: "Μάθε περισσότερα",
     rights: "Με επιφύλαξη παντός δικαιώματος.",
     license: "Άδεια",
@@ -124,6 +131,9 @@ const COPY = {
     copyright: "Πνευματικά δικαιώματα",
     close: "Κλείσιμο",
     legalInfo: "Νομικές πληροφορίες",
+    language: "Γλώσσα",
+    mainNavigation: "Κύρια πλοήγηση",
+    utilities: "Βοηθητικές ενέργειες",
   },
 };
 
@@ -155,8 +165,8 @@ const LEGAL_CONTENT = {
     el: {
       title: "Απόρρητο",
       paragraphs: [
-        "Η σκακιστική θέση και οι υπολογισμοί του Stockfish εκτελούνται στον browser σου. Δεν απαιτείται λογαριασμός για τοπικό παιχνίδι.",
-        "Η φωνητική αναγνώριση παρέχεται από τον browser και μπορεί να επεξεργάζεται σύμφωνα με τους όρους απορρήτου του παρόχου του browser ή της συσκευής.",
+        "Η σκακιστική θέση και οι υπολογισμοί του Stockfish εκτελούνται στο πρόγραμμα περιήγησής σου. Δεν απαιτείται λογαριασμός για τοπικό παιχνίδι.",
+        "Η φωνητική αναγνώριση παρέχεται από το πρόγραμμα περιήγησης και μπορεί να επεξεργάζεται σύμφωνα με τους όρους απορρήτου του παρόχου ή της συσκευής.",
       ],
     },
   },
@@ -202,19 +212,11 @@ function speak(text) {
   window.speechSynthesis.speak(utterance);
 }
 
-function uciToMove(uci) {
-  if (!uci || uci === "(none)") return null;
-  return {
-    from: uci.slice(0, 2),
-    to: uci.slice(2, 4),
-    promotion: uci.length >= 5 ? uci[4] : undefined,
-  };
-}
-
 function formatMovesSan(moves, emptyText) {
   if (moves.length === 0) return emptyText;
+
   let output = "";
-  for (let index = 0; index < moves.length; index++) {
+  for (let index = 0; index < moves.length; index += 1) {
     const moveNumber = Math.floor(index / 2) + 1;
     if (index % 2 === 0) output += `${moveNumber}. `;
     output += moves[index];
@@ -223,234 +225,193 @@ function formatMovesSan(moves, emptyText) {
   return output.trimEnd();
 }
 
-function interpretConfirmCommand(raw) {
-  const text = (raw || "").toLowerCase();
-  const yes = ["confirm", "yes", "yeah", "yep", "ok", "okay", "go", "do it", "accept"];
-  const no = ["cancel", "no", "nope", "stop", "reject", "discard"];
-  const repeat = ["repeat", "say again", "again", "what", "pardon"];
-
-  if (yes.some((word) => text.includes(word))) return "CONFIRM";
-  if (no.some((word) => text.includes(word))) return "CANCEL";
-  if (repeat.some((word) => text.includes(word))) return "REPEAT";
-  return "UNKNOWN";
-}
-
-function parseEngineInfo(line) {
-  if (!line.startsWith("info ") || !line.includes(" pv ") || !line.includes(" score ")) return null;
-
-  const tokens = line.trim().split(/\s+/);
-  const depthIndex = tokens.indexOf("depth");
-  const multiPvIndex = tokens.indexOf("multipv");
-  const scoreIndex = tokens.indexOf("score");
-  const pvIndex = tokens.indexOf("pv");
-
-  if (scoreIndex < 0 || pvIndex < 0 || !tokens[pvIndex + 1]) return null;
-
-  const depth = depthIndex >= 0 ? Number(tokens[depthIndex + 1]) || 0 : 0;
-  const multiPv = multiPvIndex >= 0 ? Number(tokens[multiPvIndex + 1]) || 1 : 1;
-  const scoreType = tokens[scoreIndex + 1];
-  const rawScore = Number(tokens[scoreIndex + 2]);
-
-  if (!Number.isFinite(rawScore)) return null;
-
-  let score;
-  if (scoreType === "cp") {
-    score = rawScore;
-  } else if (scoreType === "mate") {
-    const sign = rawScore >= 0 ? 1 : -1;
-    score = sign * (MATE_SCORE - Math.min(Math.abs(rawScore), 999) * 100);
-  } else {
-    return null;
-  }
-
-  return {
-    depth,
-    multiPv,
-    score,
-    isMate: scoreType === "mate",
-    uci: tokens[pvIndex + 1],
-  };
-}
-
-function weightedChoice(items, weights) {
-  const total = weights.reduce((sum, weight) => sum + weight, 0);
-  if (total <= 0) return items[0];
-
-  let target = Math.random() * total;
-  for (let index = 0; index < items.length; index++) {
-    target -= weights[index];
-    if (target <= 0) return items[index];
-  }
-  return items[items.length - 1];
-}
-
-function chooseEngineMove(candidates, profile, fallbackUci) {
-  const unique = new Map();
-  candidates
-    .sort((a, b) => a.multiPv - b.multiPv)
-    .forEach((candidate) => {
-      if (!unique.has(candidate.uci)) unique.set(candidate.uci, candidate);
-    });
-
-  const ranked = [...unique.values()];
-  if (ranked.length === 0) return fallbackUci;
-
-  const best = ranked[0];
-  if (profile.id === 10 || ranked.length === 1) return best.uci;
-  if (profile.id >= 7 && best.isMate && best.score > 0) return best.uci;
-
-  const eligible = ranked.filter((candidate, index) => {
-    if (index === 0) return true;
-    return Math.max(0, best.score - candidate.score) <= profile.maxLoss;
-  });
-
-  if (eligible.length === 1 || Math.random() < profile.bestChance) return best.uci;
-
-  const alternatives = eligible.slice(1);
-  const weights = alternatives.map((candidate, index) => {
-    const loss = Math.max(0, best.score - candidate.score);
-    const qualityWeight = Math.exp(-loss / profile.temperature);
-    const rankWeight = 1 / Math.sqrt(index + 1);
-    return qualityWeight * rankWeight;
-  });
-
-  return weightedChoice(alternatives, weights)?.uci || best.uci;
-}
-
-function scrollToSection(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
 export default function App() {
   const chessRef = useRef(new Chess());
-  const engineRef = useRef(null);
+  const engineControllerRef = useRef(null);
+  const finishEngineMoveRef = useRef(null);
+  const handleEngineFailureRef = useRef(null);
   const recogRef = useRef(null);
+  const recognitionSessionRef = useRef(0);
   const difficultyRef = useRef(5);
+  const busyRef = useRef(false);
   const gameEndedRef = useRef(false);
-  const engineSearchRef = useRef({ profile: DIFFICULTY_LEVELS[4], candidates: new Map() });
 
-  const [language, setLanguage] = useState(() => localStorage.getItem("blindfold-language") || "en");
+  const [language, setLanguage] = useState(() => (
+    getStoredEnum("blindfold-language", ["en", "el"], "en")
+  ));
   const [moves, setMoves] = useState([]);
-  const [status, setStatus] = useState("Enter a SAN move or press Start for voice input.");
+  const [status, setStatus] = useState(() => (
+    language === "el"
+      ? "Γράψε μια κίνηση SAN ή πάτησε Έναρξη φωνής."
+      : "Enter a SAN move or press Start for voice input."
+  ));
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [typedSan, setTypedSan] = useState("");
   const [mode, setMode] = useState("MOVE");
   const [pendingSan, setPendingSan] = useState("");
-  const [difficulty, setDifficulty] = useState(() => {
-    const saved = Number(localStorage.getItem("blindfold-difficulty"));
-    return saved >= 1 && saved <= 10 ? saved : 5;
-  });
+  const [difficulty, setDifficulty] = useState(() => (
+    getStoredInteger("blindfold-difficulty", DIFFICULTY_IDS, 5)
+  ));
   const [gameStarted, setGameStarted] = useState(false);
   const [gameEnded, setGameEnded] = useState(false);
   const [engineReady, setEngineReady] = useState(false);
+  const [engineFailed, setEngineFailed] = useState(false);
+  const [gameResultOverride, setGameResultOverride] = useState(null);
   const [legalSection, setLegalSection] = useState(null);
+  const [showEvaluation, setShowEvaluation] = useState(() => (
+    getStoredBoolean("blindfold-show-evaluation", false)
+  ));
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const copy = COPY[language] || COPY.en;
   const speechSupported = Boolean(SpeechRecognition);
-  const selectedProfile = DIFFICULTY_LEVELS.find((level) => level.id === difficulty) || DIFFICULTY_LEVELS[4];
+  const selectedProfile = getDifficultyProfile(difficulty);
   const selectedProfileName = language === "el" ? selectedProfile.nameEl : selectedProfile.nameEn;
   const legalCopy = legalSection ? LEGAL_CONTENT[legalSection]?.[language] : null;
 
-  useEffect(() => {
-    difficultyRef.current = difficulty;
-  }, [difficulty]);
+  difficultyRef.current = difficulty;
+  finishEngineMoveRef.current = finishEngineMove;
+  handleEngineFailureRef.current = handleEngineFailure;
 
   useEffect(() => {
-    localStorage.setItem("blindfold-language", language);
+    setStoredValue("blindfold-language", language);
     document.documentElement.lang = language === "el" ? "el" : "en";
   }, [language]);
 
   useEffect(() => {
-    localStorage.setItem("blindfold-difficulty", String(difficulty));
+    setStoredValue("blindfold-difficulty", difficulty);
   }, [difficulty]);
 
   useEffect(() => {
+    if (engineFailed) {
+      setStatus(language === "el"
+        ? "Το Stockfish δεν μπόρεσε να ξεκινήσει. Ανανέωσε τη σελίδα για να προσπαθήσεις ξανά."
+        : "Stockfish could not start. Reload the page to try again.");
+      return;
+    }
+
+    if (busyRef.current) {
+      const profile = getDifficultyProfile(difficultyRef.current);
+      const profileName = language === "el" ? profile.nameEl : profile.nameEn;
+      setStatus(language === "el"
+        ? `Το Stockfish σκέφτεται — ${profileName}, περίπου ${profile.displayElo} Elo...`
+        : `Engine thinking — ${profileName}, approximately ${profile.displayElo} Elo...`);
+      return;
+    }
+
+    if (gameEndedRef.current) {
+      if (gameResultOverride === "0-1") {
+        setStatus(language === "el"
+          ? "Παραίτηση. Το Stockfish κερδίζει 0-1. Πάτησε Νέα παρτίδα για να ξαναπαίξεις."
+          : "You resigned. Stockfish wins 0-1. Press New game to play again.");
+      } else if (chessRef.current.isCheckmate()) {
+        setStatus(language === "el" ? "Ματ." : "Checkmate.");
+      } else if (chessRef.current.isDraw()) {
+        setStatus(language === "el" ? "Ισοπαλία." : "Draw.");
+      } else {
+        setStatus(language === "el"
+          ? "Η παρτίδα τελείωσε. Πάτησε Νέα παρτίδα για να ξαναπαίξεις."
+          : "The game is over. Press New game to play again.");
+      }
+      return;
+    }
+
+    if (mode === "CONFIRM" && pendingSan) {
+      setStatus(language === "el"
+        ? `Επιβεβαίωση: ${pendingSan}. Πες «confirm» ή «cancel».`
+        : `Confirm: ${pendingSan}. Say confirm or cancel.`);
+      return;
+    }
+
     if (!speechSupported) {
       setStatus(language === "el"
         ? "Η φωνητική εισαγωγή δεν είναι διαθέσιμη. Γράψε μια κίνηση SAN."
         : "Voice input is unavailable. Enter a SAN move below.");
+      return;
     }
-  }, [language, speechSupported]);
+
+    setStatus(language === "el"
+      ? "Γράψε μια κίνηση SAN ή πάτησε Έναρξη φωνής."
+      : "Enter a SAN move or press Start for voice input.");
+  }, [engineFailed, language, speechSupported]);
 
   useEffect(() => {
-    const worker = new Worker(STOCKFISH_WORKER_URL);
-    engineRef.current = worker;
+    let controller = null;
 
-    worker.onmessage = (event) => {
-      const text = typeof event.data === "string" ? event.data : "";
-      if (!text) return;
+    try {
+      const worker = new Worker(STOCKFISH_WORKER_URL);
+      controller = new GameplayStockfishController(worker, {
+        onBestMove: (uci, request) => finishEngineMoveRef.current?.(uci, request),
+        onError: (message) => handleEngineFailureRef.current?.(message),
+        onReady: (ready) => setEngineReady(ready),
+      }, { moveTimeMs: ENGINE_MOVE_TIME_MS });
+      engineControllerRef.current = controller;
+      controller.start();
+    } catch (error) {
+      handleEngineFailureRef.current?.(error instanceof Error ? error.message : String(error));
+    }
 
-      for (const rawLine of text.split(/\r?\n/)) {
-        handleEngineLine(rawLine.trim());
-      }
+    return () => {
+      if (engineControllerRef.current === controller) engineControllerRef.current = null;
+      controller?.destroy();
     };
-
-    worker.postMessage("uci");
-    worker.postMessage("isready");
-
-    return () => worker.terminate();
   }, []);
+
+  useEffect(() => () => {
+    recognitionSessionRef.current += 1;
+    const recognition = recogRef.current;
+    recogRef.current = null;
+    if (!recognition) return;
+
+    recognition.onstart = null;
+    recognition.onresult = null;
+    recognition.onerror = null;
+    recognition.onend = null;
+    try {
+      recognition.abort();
+    } catch {}
+  }, []);
+
+  function setEngineBusy(nextBusy) {
+    busyRef.current = nextBusy;
+    setBusy(nextBusy);
+  }
 
   function endGame() {
     gameEndedRef.current = true;
     setGameEnded(true);
-    setBusy(false);
+    setEngineBusy(false);
   }
 
-  function handleEngineLine(line) {
-    if (!line) return;
-    if (line === "readyok") {
-      setEngineReady(true);
-      return;
-    }
-    if (line.includes("uciok")) return;
-    if (gameEndedRef.current) return;
-
-    const info = parseEngineInfo(line);
-    if (info) {
-      const candidates = engineSearchRef.current.candidates;
-      const previous = candidates.get(info.multiPv);
-      if (!previous || info.depth >= previous.depth) {
-        candidates.set(info.multiPv, info);
-      }
-      return;
-    }
-
-    if (!line.startsWith("bestmove")) return;
-
-    const parts = line.split(/\s+/);
-    const fallbackUci = parts[1] || "(none)";
-    const search = engineSearchRef.current;
-    const selectedUci = chooseEngineMove([...search.candidates.values()], search.profile, fallbackUci);
-    finishEngineMove(selectedUci, fallbackUci);
+  function handleEngineFailure() {
+    setEngineReady(false);
+    setEngineFailed(true);
+    setEngineBusy(false);
+    setStatus(language === "el"
+      ? "Το Stockfish δεν μπόρεσε να ξεκινήσει. Ανανέωσε τη σελίδα για να προσπαθήσεις ξανά."
+      : "Stockfish could not start. Reload the page to try again.");
   }
 
-  function finishEngineMove(selectedUci, fallbackUci) {
+  function finishEngineMove(uci, request) {
     if (gameEndedRef.current) return;
 
     const chess = chessRef.current;
-    const attempts = [selectedUci, fallbackUci].filter((uci, index, all) => uci && all.indexOf(uci) === index);
-    let move = null;
-
-    for (const uci of attempts) {
-      const moveObject = uciToMove(uci);
-      if (!moveObject) continue;
-      try {
-        move = chess.move(moveObject);
-      } catch {
-        move = null;
-      }
-      if (move) break;
+    if (request?.fen !== chess.fen() || chess.turn() !== "b") {
+      setEngineBusy(false);
+      return;
     }
 
-    engineSearchRef.current.candidates.clear();
-    setBusy(false);
+    const move = applyUciMove(chess, uci);
+    setEngineBusy(false);
 
     if (!move) {
       endGame();
-      setStatus(language === "el" ? "Το Stockfish δεν έχει νόμιμη κίνηση." : "Engine has no legal move.");
-      speak("I have no legal move.");
+      setStatus(language === "el"
+        ? "Το Stockfish επέστρεψε μη έγκυρη κίνηση. Πάτησε Νέα παρτίδα για να ξαναπαίξεις."
+        : "Stockfish returned an invalid move. Press New game to play again.");
+      speak("The engine could not make a move.");
       return;
     }
 
@@ -466,6 +427,7 @@ export default function App() {
       speak("Checkmate.");
       return;
     }
+
     if (chess.isDraw()) {
       endGame();
       setStatus(language === "el" ? "Ισοπαλία." : "Draw.");
@@ -474,10 +436,30 @@ export default function App() {
   }
 
   function stopListening() {
+    recognitionSessionRef.current += 1;
+    const recognition = recogRef.current;
+    recogRef.current = null;
+
+    if (recognition) {
+      recognition.onstart = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+    }
+
     try {
-      recogRef.current?.stop();
+      recognition?.abort();
     } catch {}
     setListening(false);
+  }
+
+  function stopVoiceInput() {
+    stopListening();
+    setMode("MOVE");
+    setPendingSan("");
+    setStatus(language === "el"
+      ? "Η φωνητική εισαγωγή σταμάτησε. Γράψε κίνηση ή πάτησε Έναρξη φωνής."
+      : "Voice input stopped. Enter a move or press Start.");
   }
 
   function startListeningInternal(onResult) {
@@ -492,18 +474,38 @@ export default function App() {
 
     stopListening();
 
-    const recognition = new SpeechRecognition();
+    let recognition;
+    try {
+      recognition = new SpeechRecognition();
+    } catch {
+      setStatus(language === "el"
+        ? "Η φωνητική εισαγωγή δεν μπόρεσε να ξεκινήσει. Γράψε την κίνηση."
+        : "Voice input could not start. Enter the move below.");
+      return;
+    }
+
+    const session = recognitionSessionRef.current + 1;
+    recognitionSessionRef.current = session;
     recogRef.current = recognition;
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
-    recognition.onstart = () => setListening(true);
+    const isCurrentSession = () => (
+      recognitionSessionRef.current === session && recogRef.current === recognition
+    );
+
+    recognition.onstart = () => {
+      if (isCurrentSession()) setListening(true);
+    };
     recognition.onresult = (event) => {
+      if (!isCurrentSession() || gameEndedRef.current) return;
       const raw = event.results?.[0]?.[0]?.transcript || "";
       onResult(raw);
     };
     recognition.onerror = () => {
+      if (!isCurrentSession()) return;
+      recogRef.current = null;
       setListening(false);
       setStatus(language === "el"
         ? "Σφάλμα φωνής. Γράψε την κίνηση ή προσπάθησε ξανά."
@@ -511,54 +513,82 @@ export default function App() {
       setMode("MOVE");
       setPendingSan("");
     };
-    recognition.onend = () => setListening(false);
-    recognition.start();
+    recognition.onend = () => {
+      if (!isCurrentSession()) return;
+      recogRef.current = null;
+      setListening(false);
+    };
+
+    try {
+      recognition.start();
+    } catch {
+      if (!isCurrentSession()) return;
+      recognitionSessionRef.current += 1;
+      recogRef.current = null;
+      setListening(false);
+      setStatus(language === "el"
+        ? "Η φωνητική εισαγωγή δεν μπόρεσε να ξεκινήσει. Γράψε την κίνηση."
+        : "Voice input could not start. Enter the move below.");
+    }
   }
 
   function requestEngineMove() {
-    if (gameEndedRef.current) return;
+    if (gameEndedRef.current) return false;
 
-    const engine = engineRef.current;
-    if (!engine) {
-      setStatus(language === "el" ? "Το Stockfish δεν είναι έτοιμο. Προσπάθησε ξανά." : "Engine is not ready. Please try again.");
-      return;
+    const controller = engineControllerRef.current;
+    if (!controller?.available) {
+      setStatus(language === "el"
+        ? "Το Stockfish δεν είναι έτοιμο. Προσπάθησε ξανά."
+        : "Engine is not ready. Please try again.");
+      return false;
     }
 
-    const profile = DIFFICULTY_LEVELS.find((level) => level.id === difficultyRef.current) || DIFFICULTY_LEVELS[4];
+    const profile = getDifficultyProfile(difficultyRef.current);
     const profileName = language === "el" ? profile.nameEl : profile.nameEn;
-    engineSearchRef.current = { profile, candidates: new Map() };
 
-    setBusy(true);
+    setEngineBusy(true);
     setStatus(language === "el"
-      ? `Το Stockfish σκέφτεται — επίπεδο ${profile.id}: ${profileName}...`
-      : `Engine thinking — level ${profile.id}: ${profileName}...`);
+      ? `Το Stockfish σκέφτεται — ${profileName}, περίπου ${profile.displayElo} Elo...`
+      : `Engine thinking — ${profileName}, approximately ${profile.displayElo} Elo...`);
 
-    engine.postMessage("stop");
-    engine.postMessage("setoption name UCI_LimitStrength value false");
-    engine.postMessage(`setoption name Skill Level value ${profile.skill}`);
-    engine.postMessage(`setoption name MultiPV value ${profile.multiPv}`);
-    engine.postMessage(`position fen ${chessRef.current.fen()}`);
-    engine.postMessage(`go depth ${profile.depth} nodes ${profile.nodes}`);
+    try {
+      const searchId = controller.search({
+        elo: profile.elo,
+        fen: chessRef.current.fen(),
+        moveTimeMs: ENGINE_MOVE_TIME_MS,
+      });
+      if (searchId === null) {
+        handleEngineFailure();
+        return false;
+      }
+      return true;
+    } catch {
+      handleEngineFailure();
+      return false;
+    }
   }
 
   function applyPlayerSan(rawSan, source = "keyboard") {
-    if (busy || gameEndedRef.current) return;
+    if (busyRef.current || gameEndedRef.current) return false;
+
+    if (!engineControllerRef.current?.available) {
+      setStatus(language === "el"
+        ? "Το Stockfish δεν είναι διαθέσιμο. Ανανέωσε τη σελίδα για να προσπαθήσεις ξανά."
+        : "Stockfish is unavailable. Reload the page to try again.");
+      return false;
+    }
 
     const san = (rawSan || "").trim();
     if (!san) {
       setStatus(language === "el"
         ? "Γράψε κίνηση SAN, για παράδειγμα e4, Nf3 ή O-O."
         : "Enter a move in SAN, for example e4, Nf3 or O-O.");
-      return;
+      return false;
     }
 
     const chess = chessRef.current;
-    let move = null;
-    try {
-      move = chess.move(san, { sloppy: true });
-    } catch {
-      move = null;
-    }
+    if (chess.turn() !== "w") return false;
+    const move = applySanMove(chess, san);
 
     if (!move) {
       setMode("MOVE");
@@ -567,7 +597,7 @@ export default function App() {
         ? "Παράνομη κίνηση. Γράψε SAN όπως e4, Nf3 ή O-O."
         : "Illegal move. Enter SAN such as e4, Nf3 or O-O.");
       if (source === "voice") speak("Illegal move. Please try again.");
-      return;
+      return false;
     }
 
     stopListening();
@@ -579,13 +609,14 @@ export default function App() {
       endGame();
       setStatus(language === "el" ? "Ματ." : "Checkmate.");
       speak("Checkmate.");
-      return;
+      return true;
     }
+
     if (chess.isDraw()) {
       endGame();
       setStatus(language === "el" ? "Ισοπαλία." : "Draw.");
       speak("Draw.");
-      return;
+      return true;
     }
 
     setMode("MOVE");
@@ -595,6 +626,7 @@ export default function App() {
       : `You played: ${move.san}. Engine thinking...`);
     speak(`You played: ${move.san}.`);
     requestEngineMove();
+    return true;
   }
 
   function submitTypedMove(event) {
@@ -603,11 +635,13 @@ export default function App() {
   }
 
   function startListeningForMove() {
-    if (busy || gameEndedRef.current) return;
+    if (busyRef.current || gameEndedRef.current) return;
 
     setMode("MOVE");
     setPendingSan("");
-    setStatus(language === "el" ? "Ακρόαση... Πες την κίνησή σου στα αγγλικά." : "Listening... Say your move.");
+    setStatus(language === "el"
+      ? "Ακρόαση... Πες την κίνησή σου στα αγγλικά."
+      : "Listening... Say your move.");
 
     startListeningInternal((raw) => {
       const san = sanFromSpeech(raw);
@@ -631,11 +665,12 @@ export default function App() {
   }
 
   function startListeningForConfirm(sanToConfirm) {
-    if (busy || gameEndedRef.current) return;
+    if (busyRef.current || gameEndedRef.current) return;
 
     setStatus(language === "el"
       ? `Επιβεβαίωση: ${sanToConfirm}. Πες confirm ή cancel.`
       : `Confirm: ${sanToConfirm}. Say confirm or cancel.`);
+
     startListeningInternal((raw) => {
       const command = interpretConfirmCommand(raw);
 
@@ -648,7 +683,9 @@ export default function App() {
         stopListening();
         setMode("MOVE");
         setPendingSan("");
-        setStatus(language === "el" ? "Ακυρώθηκε. Γράψε κίνηση ή πάτησε Έναρξη φωνής." : "Canceled. Enter a move or press Start.");
+        setStatus(language === "el"
+          ? "Ακυρώθηκε. Γράψε κίνηση ή πάτησε Έναρξη φωνής."
+          : "Canceled. Enter a move or press Start.");
         speak("Canceled.");
         return;
       }
@@ -681,12 +718,14 @@ export default function App() {
     const nextDifficulty = Number(event.target.value);
     difficultyRef.current = nextDifficulty;
     setDifficulty(nextDifficulty);
-    const profile = DIFFICULTY_LEVELS.find((level) => level.id === nextDifficulty);
+
+    const profile = getDifficultyProfile(nextDifficulty);
     if (!profile) return;
+
     const name = language === "el" ? profile.nameEl : profile.nameEn;
     setStatus(language === "el"
-      ? `Επιλέχθηκε επίπεδο ${profile.id}: ${name}.`
-      : `Selected level ${profile.id}: ${name}.`);
+      ? `Επιλέχθηκε ${name} — περίπου ${profile.displayElo} Elo μηχανής.`
+      : `Selected ${name} — approximately ${profile.displayElo} engine Elo.`);
   }
 
   function resignGame() {
@@ -694,12 +733,12 @@ export default function App() {
     if (!window.confirm(copy.resignConfirm)) return;
 
     stopListening();
-    engineRef.current?.postMessage("stop");
-    engineSearchRef.current.candidates.clear();
+    engineControllerRef.current?.cancel();
     endGame();
     setTypedSan("");
     setMode("MOVE");
     setPendingSan("");
+    setGameResultOverride("0-1");
     setStatus(language === "el"
       ? "Παραίτηση. Το Stockfish κερδίζει 0-1. Πάτησε Νέα παρτίδα για να ξαναπαίξεις."
       : "You resigned. Stockfish wins 0-1. Press New game to play again.");
@@ -708,25 +747,56 @@ export default function App() {
 
   function newGame() {
     stopListening();
-    engineRef.current?.postMessage("stop");
-    engineRef.current?.postMessage("ucinewgame");
-    engineRef.current?.postMessage("isready");
-    engineSearchRef.current.candidates.clear();
+    engineControllerRef.current?.cancel({ newGame: true });
 
     gameEndedRef.current = false;
     chessRef.current = new Chess();
     setMoves([]);
     setTypedSan("");
-    setBusy(false);
+    setEngineBusy(false);
     setGameStarted(false);
     setGameEnded(false);
+    setGameResultOverride(null);
     setMode("MOVE");
     setPendingSan("");
     setStatus(language === "el"
-      ? `Νέα παρτίδα — επίπεδο ${selectedProfile.id}: ${selectedProfileName}. Γράψε κίνηση SAN ή πάτησε Έναρξη φωνής.`
-      : `New game — level ${selectedProfile.id}: ${selectedProfileName}. Enter a SAN move or press Start.`);
+      ? `Νέα παρτίδα — ${selectedProfileName}, περίπου ${selectedProfile.displayElo} Elo μηχανής. Γράψε κίνηση SAN ή πάτησε Έναρξη φωνής.`
+      : `New game — ${selectedProfileName}, approximately ${selectedProfile.displayElo} engine Elo. Enter a SAN move or press Start.`);
     speak("New game. Your move.");
   }
+
+  function openHowToPlay(event) {
+    event?.preventDefault();
+    setLegalSection(null);
+    setShowSettings(false);
+    setShowHowToPlay(true);
+  }
+
+  function openSettings(event) {
+    event.preventDefault();
+    setLegalSection(null);
+    setShowHowToPlay(false);
+    setShowSettings(true);
+  }
+
+  function openLegalSection(section) {
+    setShowHowToPlay(false);
+    setShowSettings(false);
+    setLegalSection(section);
+  }
+
+  function openEvaluationPanel() {
+    setShowEvaluation(true);
+    window.requestAnimationFrame(() => {
+      document.getElementById("stockfish-evaluation-panel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+  }
+
+  const currentFen = chessRef.current.fen();
+  const sanText = formatMovesSan(moves, copy.noMoves);
 
   return (
     <div className="app-shell" id="home">
@@ -737,10 +807,11 @@ export default function App() {
             <h1>{copy.appName}</h1>
           </div>
 
-          <div className="utility-actions" aria-label={copy.settings}>
+          <div className="utility-actions" aria-label={copy.utilities}>
             <button
+              aria-controls="stockfish-evaluation-panel"
               className="assistant-launch-button"
-              onClick={() => scrollToSection("difficulty")}
+              onClick={openEvaluationPanel}
               title={engineReady ? copy.engineReady : copy.engineChecking}
               type="button"
             >
@@ -751,7 +822,7 @@ export default function App() {
               <span>{copy.stockfishAssistant}</span>
             </button>
 
-            <div className="language-switch" aria-label="Language">
+            <div className="language-switch" aria-label={copy.language}>
               <button
                 aria-pressed={language === "el"}
                 className={language === "el" ? "active" : ""}
@@ -770,7 +841,15 @@ export default function App() {
               </button>
             </div>
 
-            <a href="#difficulty">{copy.settings}</a>
+            <a
+              aria-controls="appearance-settings-dialog"
+              aria-expanded={showSettings}
+              aria-haspopup="dialog"
+              href="#appearance-settings-dialog"
+              onClick={openSettings}
+            >
+              {copy.settings}
+            </a>
             <a href="mailto:markellos.markides@gmail.com?subject=Blindfold%20Chess%20Feedback">{copy.feedback}</a>
             <a className="ecosystem-link" href="https://markellosecosystem.com/" rel="noopener noreferrer" target="_blank">
               {copy.back}
@@ -779,12 +858,20 @@ export default function App() {
         </div>
 
         <div className="navigation-row">
-          <nav className="main-nav" aria-label="Main navigation">
+          <nav className="main-nav" aria-label={copy.mainNavigation}>
             <a className="active" href="#home">{copy.home}</a>
             <a href="#play">{copy.play}</a>
             <a href="#difficulty">{copy.difficultyNav}</a>
             <a href="#move-input">{copy.inputNav}</a>
-            <a href="#how-to-play">{copy.guideNav}</a>
+            <a
+              aria-controls="how-to-play-dialog"
+              aria-expanded={showHowToPlay}
+              aria-haspopup="dialog"
+              href="#how-to-play"
+              onClick={openHowToPlay}
+            >
+              {copy.guideNav}
+            </a>
           </nav>
         </div>
       </header>
@@ -800,28 +887,28 @@ export default function App() {
           <section className="control-section" id="difficulty">
             <label htmlFor="difficulty-select">{copy.difficulty}</label>
             <select
-              id="difficulty-select"
-              value={difficulty}
-              onChange={changeDifficulty}
               disabled={gameStarted || busy}
+              id="difficulty-select"
+              onChange={changeDifficulty}
+              value={difficulty}
             >
               {DIFFICULTY_LEVELS.map((level) => (
                 <option key={level.id} value={level.id}>
-                  {level.id}. {language === "el" ? level.nameEl : level.nameEn}
+                  {language === "el" ? level.nameEl : level.nameEn} — ≈{level.displayElo} Elo
                 </option>
               ))}
             </select>
             <div className="field-help">
-              {copy.skill} {selectedProfile.skill}/20 · {copy.depth} {selectedProfile.depth} · {selectedProfile.nodes.toLocaleString(language === "el" ? "el-GR" : "en-US")} {copy.nodes}
+              {copy.approximateEngineElo}: ≈{selectedProfile.displayElo} · {copy.officialLimit}
               {gameStarted ? ` · ${copy.locked}` : ""}
             </div>
           </section>
 
           <div className="game-actions">
-            <button className="primary-button" onClick={newGame} disabled={busy}>{copy.newGame}</button>
-            <button className="danger-button" onClick={resignGame} disabled={!gameStarted || gameEnded}>{copy.resign}</button>
-            <button onClick={startListeningForMove} disabled={busy || gameEnded || listening || !speechSupported}>{copy.startVoice}</button>
-            <button onClick={stopListening} disabled={!listening}>{copy.stop}</button>
+            <button className="primary-button" onClick={newGame}>{copy.newGame}</button>
+            <button className="danger-button" disabled={!gameStarted || gameEnded} onClick={resignGame}>{copy.resign}</button>
+            <button disabled={busy || engineFailed || gameEnded || listening || !speechSupported} onClick={startListeningForMove}>{copy.startVoice}</button>
+            <button disabled={!listening} onClick={stopVoiceInput}>{copy.stop}</button>
           </div>
 
           <section className="control-section" id="move-input">
@@ -829,78 +916,130 @@ export default function App() {
             <p className="field-help input-help">{copy.inputHelp}</p>
             <form className="move-form" onSubmit={submitTypedMove}>
               <input
-                type="text"
-                value={typedSan}
-                onChange={(event) => setTypedSan(event.target.value)}
-                placeholder={copy.placeholder}
                 aria-label={copy.placeholder}
                 autoCapitalize="characters"
                 autoComplete="off"
+                disabled={busy || engineFailed || gameEnded}
+                onChange={(event) => setTypedSan(event.target.value)}
+                placeholder={copy.placeholder}
                 spellCheck="false"
-                disabled={busy || gameEnded}
+                type="text"
+                value={typedSan}
               />
-              <button className="primary-button" type="submit" disabled={busy || gameEnded || !typedSan.trim()}>{copy.playMove}</button>
+              <button className="primary-button" disabled={busy || engineFailed || gameEnded || !typedSan.trim()} type="submit">
+                {copy.playMove}
+              </button>
             </form>
           </section>
 
+          <BoardVisibilityToggle
+            fen={currentFen}
+            inputDisabled={busy || engineFailed || gameEnded}
+            language={language}
+            onSubmitMove={(san) => applyPlayerSan(san, "board")}
+          />
+
           <section className="moves-panel" aria-live="polite">
             <h3>{copy.moves}</h3>
-            <pre>{formatMovesSan(moves, copy.noMoves)}</pre>
+            <MovesVisibilityToggle
+              gameResult={gameResultOverride}
+              language={language}
+              sanText={sanText}
+            />
           </section>
 
           <section className="status-panel" aria-live="polite">
             <strong>{copy.status}:</strong> {status} {listening ? ` (${copy.listening})` : ""}{" "}
             {mode === "CONFIRM" && pendingSan ? ` | ${copy.pending}: ${pendingSan}` : ""}
+            <ConfirmMoveButton
+              disabled={busy || engineFailed || gameEnded}
+              language={language}
+              onConfirm={(san) => applyPlayerSan(san, "keyboard")}
+              pendingSan={mode === "CONFIRM" ? pendingSan : ""}
+            />
           </section>
-        </section>
 
-        <section className="guide-panel" id="how-to-play">
-          <p className="eyebrow">{copy.guideNav}</p>
-          <h2>{copy.guideTitle}</h2>
-          <p>{copy.guideIntro}</p>
-          <ol>
-            <li>{copy.guide1}</li>
-            <li>{copy.guide2}</li>
-            <li>{copy.guide3}</li>
-            <li>{copy.guide4}</li>
-          </ol>
+          <EvaluationPanel
+            fen={currentFen}
+            gameplayBusy={busy}
+            language={language}
+            moveCount={moves.length}
+            onVisibilityChange={setShowEvaluation}
+            showEvaluation={showEvaluation}
+          />
         </section>
       </main>
 
       <div className="local-storage-notice">
         <span aria-hidden="true">ⓘ</span>
         <span>{copy.localNotice}</span>
-        <a href="#how-to-play">{copy.learnMore}</a>
+        <a
+          aria-controls="how-to-play-dialog"
+          aria-expanded={showHowToPlay}
+          aria-haspopup="dialog"
+          href="#how-to-play"
+          onClick={openHowToPlay}
+        >
+          {copy.learnMore}
+        </a>
       </div>
 
       <footer className="app-footer">
         <p>© 2026 Markellos Markides. {copy.rights}</p>
         <nav className="footer-meta" aria-label={copy.legalInfo}>
-          <button onClick={() => setLegalSection("license")} type="button">{copy.license}</button>
-          <button onClick={() => setLegalSection("privacy")} type="button">{copy.privacy}</button>
-          <button onClick={() => setLegalSection("analytics")} type="button">{copy.analytics}</button>
-          <button onClick={() => setLegalSection("copyright")} type="button">{copy.copyright}</button>
+          <button onClick={() => openLegalSection("license")} type="button">{copy.license}</button>
+          <button onClick={() => openLegalSection("privacy")} type="button">{copy.privacy}</button>
+          <button onClick={() => openLegalSection("analytics")} type="button">{copy.analytics}</button>
+          <button onClick={() => openLegalSection("copyright")} type="button">{copy.copyright}</button>
         </nav>
         <small className="build-version">{APP_VERSION}</small>
       </footer>
 
+      {showHowToPlay ? (
+        <ModalDialog
+          describedBy="how-to-play-dialog-intro"
+          dialogClassName="legal-dialog"
+          id="how-to-play-dialog"
+          labelId="how-to-play-dialog-title"
+          onClose={() => setShowHowToPlay(false)}
+        >
+            <p className="eyebrow">{copy.guideNav}</p>
+            <h2 id="how-to-play-dialog-title">{copy.guideTitle}</h2>
+            <p id="how-to-play-dialog-intro">{copy.guideIntro}</p>
+            <ol>
+              <li>{copy.guide1}</li>
+              <li>{copy.guide2}</li>
+              <li>{copy.guide3}</li>
+              <li>{copy.guide4}</li>
+            </ol>
+            <p className="field-help">{copy.eloNotice}</p>
+            <div className="dialog-actions">
+              <button className="primary-button" onClick={() => setShowHowToPlay(false)} type="button">
+                {copy.close}
+              </button>
+            </div>
+        </ModalDialog>
+      ) : null}
+
       {legalCopy ? (
-        <div className="modal-backdrop" onClick={() => setLegalSection(null)} role="presentation">
-          <section
-            aria-labelledby="legal-dialog-title"
-            aria-modal="true"
-            className="legal-dialog"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
+        <ModalDialog
+          dialogClassName="legal-dialog"
+          labelId="legal-dialog-title"
+          onClose={() => setLegalSection(null)}
+        >
             <h2 id="legal-dialog-title">{legalCopy.title}</h2>
             {legalCopy.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
             <div className="dialog-actions">
               <button className="primary-button" onClick={() => setLegalSection(null)} type="button">{copy.close}</button>
             </div>
-          </section>
-        </div>
+        </ModalDialog>
       ) : null}
+
+      <SettingsPanel
+        isOpen={showSettings}
+        language={language}
+        onClose={() => setShowSettings(false)}
+      />
     </div>
   );
 }

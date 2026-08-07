@@ -39,7 +39,7 @@
 
 .chessboard {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
   width: min(100%, 560px);
   aspect-ratio: 1;
   margin: 0 auto;
@@ -47,6 +47,12 @@
   border: 3px solid var(--accent-dark);
   border-radius: 0.35rem;
   box-shadow: 0 12px 28px rgb(15 23 42 / 0.16);
+}
+
+.chessboard-row {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  min-height: 0;
 }
 
 .chessboard .chessboard-square {
@@ -105,14 +111,6 @@
   border: 4px solid rgb(37 99 235 / 0.72);
 }
 
-.chessboard .chessboard-square[draggable="true"] {
-  cursor: grab;
-}
-
-.chessboard .chessboard-square[draggable="true"]:active {
-  cursor: grabbing;
-}
-
 .chessboard-piece {
   position: relative;
   z-index: 1;
@@ -125,6 +123,15 @@
   forced-color-adjust: none;
   pointer-events: none;
   user-select: none;
+}
+
+.chessboard-piece[draggable="true"] {
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.chessboard-piece[draggable="true"]:active {
+  cursor: grabbing;
 }
 
 .chessboard-piece.is-white-piece {

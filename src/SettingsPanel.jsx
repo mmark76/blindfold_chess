@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useState } from "react";
+import ModalDialog from "./ModalDialog.jsx";
+import { getStoredValue, setStoredValue } from "./storage.js";
 import "./settings-panel.css";
 
 const DEFAULT_SETTINGS = Object.freeze({
@@ -54,11 +55,11 @@ const LABELS = Object.freeze({
     boardSize: "Μέγεθος σκακιέρας",
     reset: "Επαναφορά ρυθμίσεων",
     close: "Κλείσιμο",
-    saved: "Οι ρυθμίσεις εμφάνισης αποθηκεύονται τοπικά σε αυτόν τον browser.",
+    saved: "Οι ρυθμίσεις εμφάνισης αποθηκεύονται τοπικά σε αυτό το πρόγραμμα περιήγησης.",
     themes: { classic: "Κλασικό", light: "Φωτεινό", dark: "Σκούρο" },
     accents: { brown: "Καφέ", blue: "Μπλε", green: "Πράσινο", burgundy: "Μπορντό" },
     textSizes: { small: "Μικρό", normal: "Κανονικό", large: "Μεγάλο", xlarge: "Πολύ μεγάλο" },
-    fonts: { system: "Συστήματος", serif: "Serif", sans: "Sans-serif", mono: "Monospace" },
+    fonts: { system: "Συστήματος", serif: "Με πατούρες", sans: "Χωρίς πατούρες", mono: "Σταθερού πλάτους" },
     boardSizes: { small: "Μικρή", medium: "Μεσαία", large: "Μεγάλη" },
   },
 });
@@ -67,7 +68,7 @@ function readSettings() {
   const saved = { ...DEFAULT_SETTINGS };
 
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
-    const value = localStorage.getItem(STORAGE_KEYS[key]);
+    const value = getStoredValue(STORAGE_KEYS[key]);
     if (value && ALLOWED_VALUES[key].has(value)) saved[key] = value;
   }
 
@@ -85,7 +86,7 @@ function applySettings(settings) {
 
 function saveSettings(settings) {
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
-    localStorage.setItem(STORAGE_KEYS[key], settings[key]);
+    setStoredValue(STORAGE_KEYS[key], settings[key]);
   }
 }
 
@@ -102,92 +103,13 @@ function SettingsSelect({ id, label, value, options, onChange }) {
   );
 }
 
-export default function SettingsPanel() {
-  const dialogRef = useRef(null);
-  const previousFocusRef = useRef(null);
+export default function SettingsPanel({ isOpen, language, onClose }) {
   const [settings, setSettings] = useState(readSettings);
-  const [language, setLanguage] = useState(
-    document.documentElement.lang === "el" ? "el" : "en",
-  );
-  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     applySettings(settings);
     saveSettings(settings);
   }, [settings]);
-
-  useEffect(() => {
-    const syncLanguageAndLink = () => {
-      setLanguage(document.documentElement.lang === "el" ? "el" : "en");
-      const settingsLink = document.querySelector(
-        '.utility-actions > a[href="#difficulty"], .utility-actions > a[data-settings-link]',
-      );
-
-      if (settingsLink) {
-        settingsLink.dataset.settingsLink = "true";
-        settingsLink.setAttribute("href", "#appearance-settings-dialog");
-        settingsLink.setAttribute("aria-haspopup", "dialog");
-        settingsLink.setAttribute("aria-controls", "appearance-settings-dialog");
-      }
-    };
-
-    const handleSettingsClick = (event) => {
-      const trigger = event.target.closest?.(
-        '.utility-actions > a[data-settings-link], .utility-actions > a[href="#difficulty"]',
-      );
-      if (!trigger) return;
-
-      event.preventDefault();
-      previousFocusRef.current = trigger;
-      setIsOpen(true);
-    };
-
-    syncLanguageAndLink();
-
-    const rootObserver = new MutationObserver(syncLanguageAndLink);
-    rootObserver.observe(document.getElementById("root") || document.body, {
-      childList: true,
-      subtree: true,
-    });
-
-    const languageObserver = new MutationObserver(syncLanguageAndLink);
-    languageObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["lang"],
-    });
-
-    document.addEventListener("click", handleSettingsClick, true);
-
-    return () => {
-      rootObserver.disconnect();
-      languageObserver.disconnect();
-      document.removeEventListener("click", handleSettingsClick, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const closeDialog = () => {
-      setIsOpen(false);
-      window.requestAnimationFrame(() => previousFocusRef.current?.focus());
-    };
-
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") closeDialog();
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    window.requestAnimationFrame(() => dialogRef.current?.focus());
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
 
   const copy = LABELS[language] || LABELS.en;
   const updateSetting = (key) => (event) => {
@@ -197,36 +119,23 @@ export default function SettingsPanel() {
   };
 
   const resetSettings = () => setSettings({ ...DEFAULT_SETTINGS });
-  const closeSettings = () => {
-    setIsOpen(false);
-    window.requestAnimationFrame(() => previousFocusRef.current?.focus());
-  };
-
   if (!isOpen) return null;
 
-  return createPortal(
-    <div
-      className="settings-modal-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) closeSettings();
-      }}
-      role="presentation"
+  return (
+    <ModalDialog
+      backdropClassName="settings-modal-backdrop"
+      describedBy="appearance-settings-intro"
+      dialogClassName="settings-dialog"
+      id="appearance-settings-dialog"
+      labelId="appearance-settings-title"
+      onClose={onClose}
     >
-      <section
-        aria-labelledby="appearance-settings-title"
-        aria-modal="true"
-        className="settings-dialog"
-        id="appearance-settings-dialog"
-        ref={dialogRef}
-        role="dialog"
-        tabIndex={-1}
-      >
         <div className="settings-heading">
           <div>
             <h2 id="appearance-settings-title">{copy.heading}</h2>
-            <p>{copy.intro}</p>
+            <p id="appearance-settings-intro">{copy.intro}</p>
           </div>
-          <button aria-label={copy.close} onClick={closeSettings} type="button">×</button>
+          <button aria-label={copy.close} onClick={onClose} type="button">×</button>
         </div>
 
         <div className="settings-grid">
@@ -271,10 +180,8 @@ export default function SettingsPanel() {
 
         <div className="settings-dialog-actions">
           <button onClick={resetSettings} type="button">{copy.reset}</button>
-          <button className="primary-button" onClick={closeSettings} type="button">{copy.close}</button>
+          <button className="primary-button" onClick={onClose} type="button">{copy.close}</button>
         </div>
-      </section>
-    </div>,
-    document.body,
+    </ModalDialog>
   );
 }

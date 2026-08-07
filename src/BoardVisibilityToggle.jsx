@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Chess } from "chess.js";
+import { moveFromSquares, squaresFromFen } from "./chess/board.js";
+import { getStoredBoolean, setStoredValue } from "./storage.js";
 import "./board-visibility.css";
 
 const STORAGE_KEY = "blindfold-show-board";
+const INITIAL_FEN = new Chess().fen();
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const PIECES = Object.freeze({
   K: "♚\uFE0E",
@@ -51,74 +53,8 @@ const PIECE_NAMES = Object.freeze({
   },
 });
 
-function readSanText() {
-  return document.querySelector(".moves-panel pre")?.textContent?.trim() || "";
-}
-
-function sanMovesFromText(text) {
-  if (!text || text === "No moves yet." || text === "Δεν υπάρχουν κινήσεις ακόμη.") {
-    return [];
-  }
-
-  return text
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter((token) => !/^\d+\.$/.test(token));
-}
-
-function positionFromSanText(text) {
-  const chess = new Chess();
-
-  for (const san of sanMovesFromText(text)) {
-    try {
-      const move = chess.move(san, { sloppy: true });
-      if (!move) break;
-    } catch {
-      break;
-    }
-  }
-
-  return chess.fen();
-}
-
-function squaresFromFen(fen) {
-  const rows = fen.split(" ")[0].split("/");
-  const squares = [];
-
-  rows.forEach((row, rowIndex) => {
-    let fileIndex = 0;
-
-    for (const token of row) {
-      const emptyCount = Number(token);
-
-      if (Number.isInteger(emptyCount) && emptyCount > 0) {
-        for (let index = 0; index < emptyCount; index += 1) {
-          squares.push({
-            square: `${FILES[fileIndex]}${8 - rowIndex}`,
-            piece: "",
-            rowIndex,
-            fileIndex,
-          });
-          fileIndex += 1;
-        }
-        continue;
-      }
-
-      squares.push({
-        square: `${FILES[fileIndex]}${8 - rowIndex}`,
-        piece: token,
-        rowIndex,
-        fileIndex,
-      });
-      fileIndex += 1;
-    }
-  });
-
-  return squares;
-}
-
 function getInitialVisibility() {
-  return localStorage.getItem(STORAGE_KEY) === "true";
+  return getStoredBoolean(STORAGE_KEY, false);
 }
 
 function getPieceColorClass(piece) {
@@ -126,55 +62,8 @@ function getPieceColorClass(piece) {
   return piece === piece.toUpperCase() ? "is-white-piece" : "is-black-piece";
 }
 
-function getMoveFormElements() {
-  const input = document.querySelector('.move-form input[type="text"]');
-  const form = input?.closest("form") || null;
-  return { form, input };
-}
-
-function submitSanThroughMoveForm(san) {
-  const { form, input } = getMoveFormElements();
-  if (!form || !input || input.disabled) return false;
-
-  const valueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  )?.set;
-
-  if (valueSetter) {
-    valueSetter.call(input, san);
-  } else {
-    input.value = san;
-  }
-
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-
-  window.setTimeout(() => {
-    if (!input.disabled) form.requestSubmit();
-  }, 0);
-
-  return true;
-}
-
-function moveFromSquares(fen, from, to) {
-  const chess = new Chess(fen);
-  const piece = chess.get(from);
-  if (!piece) return null;
-
-  const promotion = piece.type === "p" && (to.endsWith("8") || to.endsWith("1"))
-    ? "q"
-    : undefined;
-
-  try {
-    return chess.move({ from, to, promotion });
-  } catch {
-    return null;
-  }
-}
-
 function setPieceDragImage(event) {
-  const pieceElement = event.currentTarget.querySelector(".chessboard-piece");
+  const pieceElement = event.currentTarget;
   if (!pieceElement || !event.dataTransfer) return;
 
   const dragImage = pieceElement.cloneNode(true);
@@ -205,80 +94,22 @@ function setPieceDragImage(event) {
   window.setTimeout(() => dragImage.remove(), 0);
 }
 
-export default function BoardVisibilityToggle() {
+export default function BoardVisibilityToggle({
+  fen = INITIAL_FEN,
+  inputDisabled = false,
+  language = "en",
+  onSubmitMove = () => false,
+}) {
+  const boardRef = useRef(null);
+  const squareRefs = useRef(new Map());
   const [showBoard, setShowBoard] = useState(getInitialVisibility);
   const [selectedSquare, setSelectedSquare] = useState("");
+  const [focusedSquare, setFocusedSquare] = useState("a8");
   const [interactionMessage, setInteractionMessage] = useState("");
-  const [state, setState] = useState({
-    host: null,
-    language: "en",
-    sanText: "",
-  });
-
   useEffect(() => {
-    let animationFrame = 0;
-
-    const sync = () => {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(() => {
-        const movesPanel = document.querySelector(".moves-panel");
-        const language = document.documentElement.lang === "el" ? "el" : "en";
-        const sanText = readSanText();
-
-        if (!movesPanel) {
-          setState({ host: null, language, sanText });
-          return;
-        }
-
-        let host = document.querySelector("[data-board-visibility-host]");
-        if (!host) {
-          host = document.createElement("section");
-          host.dataset.boardVisibilityHost = "true";
-          host.className = "board-visibility-panel";
-          movesPanel.insertAdjacentElement("beforebegin", host);
-        }
-
-        setState((previous) => {
-          if (
-            previous.host === host &&
-            previous.language === language &&
-            previous.sanText === sanText
-          ) {
-            return previous;
-          }
-
-          return { host, language, sanText };
-        });
-      });
-    };
-
-    sync();
-
-    const rootObserver = new MutationObserver(sync);
-    rootObserver.observe(document.getElementById("root") || document.body, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-
-    const languageObserver = new MutationObserver(sync);
-    languageObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["lang"],
-    });
-
-    return () => {
-      rootObserver.disconnect();
-      languageObserver.disconnect();
-      window.cancelAnimationFrame(animationFrame);
-    };
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, String(showBoard));
+    setStoredValue(STORAGE_KEY, showBoard);
   }, [showBoard]);
 
-  const fen = useMemo(() => positionFromSanText(state.sanText), [state.sanText]);
   const squares = useMemo(() => squaresFromFen(fen), [fen]);
   const legalTargets = useMemo(() => {
     if (!selectedSquare) return new Set();
@@ -298,9 +129,7 @@ export default function BoardVisibilityToggle() {
     setInteractionMessage("");
   }, [fen]);
 
-  if (!state.host) return null;
-
-  const isGreek = state.language === "el";
+  const isGreek = language === "el";
   const buttonLabel = showBoard
     ? isGreek ? "Απόκρυψη σκακιέρας" : "Hide board"
     : isGreek ? "Εμφάνιση σκακιέρας" : "Show board";
@@ -309,7 +138,7 @@ export default function BoardVisibilityToggle() {
     ? turn === "w" ? "Παίζουν τα λευκά" : "Παίζουν τα μαύρα"
     : turn === "w" ? "White to move" : "Black to move";
   const boardLabel = isGreek ? "Τρέχουσα σκακιστική θέση" : "Current chess position";
-  const pieceNames = PIECE_NAMES[state.language] || PIECE_NAMES.en;
+  const pieceNames = PIECE_NAMES[language] || PIECE_NAMES.en;
   const defaultInteractionText = isGreek
     ? "Κάνε κλικ σε λευκό κομμάτι και μετά στο τετράγωνο προορισμού ή σύρε το με το ποντίκι."
     : "Click a white piece and then its destination, or drag it with the mouse.";
@@ -322,10 +151,7 @@ export default function BoardVisibilityToggle() {
     : "Select a white piece.";
   const illegalMessage = isGreek ? "Μη νόμιμη κίνηση." : "Illegal move.";
 
-  const canUseBoardInput = () => {
-    const { input } = getMoveFormElements();
-    return Boolean(input && !input.disabled && turn === "w");
-  };
+  const canUseBoardInput = () => !inputDisabled && turn === "w";
 
   const attemptMove = (from, to) => {
     if (!canUseBoardInput()) {
@@ -339,7 +165,7 @@ export default function BoardVisibilityToggle() {
       return;
     }
 
-    if (!submitSanThroughMoveForm(move.san)) {
+    if (onSubmitMove(move.san) === false) {
       setInteractionMessage(blockedMessage);
       return;
     }
@@ -414,8 +240,43 @@ export default function BoardVisibilityToggle() {
     if (from) attemptMove(from, to);
   };
 
-  return createPortal(
-    <>
+  const handleSquareKeyDown = (event, square) => {
+    const fileIndex = FILES.indexOf(square[0]);
+    const rank = Number(square[1]);
+    let nextFileIndex = fileIndex;
+    let nextRank = rank;
+
+    switch (event.key) {
+      case "ArrowUp":
+        nextRank = Math.min(8, rank + 1);
+        break;
+      case "ArrowDown":
+        nextRank = Math.max(1, rank - 1);
+        break;
+      case "ArrowLeft":
+        nextFileIndex = Math.max(0, fileIndex - 1);
+        break;
+      case "ArrowRight":
+        nextFileIndex = Math.min(7, fileIndex + 1);
+        break;
+      case "Home":
+        nextFileIndex = 0;
+        break;
+      case "End":
+        nextFileIndex = 7;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    const nextSquare = `${FILES[nextFileIndex]}${nextRank}`;
+    setFocusedSquare(nextSquare);
+    squareRefs.current.get(nextSquare)?.focus();
+  };
+
+  return (
+    <section className="board-visibility-panel" data-board-visibility-host="true">
       <div className="board-visibility-toolbar">
         <button
           aria-controls="current-chessboard"
@@ -438,57 +299,80 @@ export default function BoardVisibilityToggle() {
             {interactionMessage || defaultInteractionText}
           </p>
           <div
+            aria-colcount={8}
+            aria-disabled={inputDisabled || turn !== "w"}
             aria-label={`${boardLabel}. ${turnLabel}. FEN: ${fen}`}
+            aria-rowcount={8}
             className="chessboard"
             id="current-chessboard"
+            ref={boardRef}
             role="grid"
           >
-            {squares.map(({ square, piece, rowIndex, fileIndex }) => {
-              const isLight = (rowIndex + fileIndex) % 2 === 0;
-              const pieceName = piece ? pieceNames[piece] : "";
-              const pieceColorClass = getPieceColorClass(piece);
-              const isSelected = selectedSquare === square;
-              const isLegalTarget = legalTargets.has(square);
-              const squareClassName = [
-                "chessboard-square",
-                isLight ? "is-light" : "is-dark",
-                piece ? "has-piece" : "",
-                isSelected ? "is-selected" : "",
-                isLegalTarget ? "is-legal-target" : "",
-              ].filter(Boolean).join(" ");
+            {Array.from({ length: 8 }, (_, boardRowIndex) => (
+              <div className="chessboard-row" key={boardRowIndex} role="row">
+                {squares
+                  .slice(boardRowIndex * 8, boardRowIndex * 8 + 8)
+                  .map(({ square, piece, rowIndex, fileIndex }) => {
+                    const isLight = (rowIndex + fileIndex) % 2 === 0;
+                    const pieceName = piece ? pieceNames[piece] : "";
+                    const pieceColorClass = getPieceColorClass(piece);
+                    const isSelected = selectedSquare === square;
+                    const isLegalTarget = legalTargets.has(square);
+                    const isDraggable = Boolean(
+                      piece && piece === piece.toUpperCase() && turn === "w" && !inputDisabled,
+                    );
+                    const squareClassName = [
+                      "chessboard-square",
+                      isLight ? "is-light" : "is-dark",
+                      piece ? "has-piece" : "",
+                      isSelected ? "is-selected" : "",
+                      isLegalTarget ? "is-legal-target" : "",
+                    ].filter(Boolean).join(" ");
 
-              return (
-                <button
-                  aria-label={pieceName ? `${square}: ${pieceName}` : square}
-                  aria-pressed={isSelected}
-                  className={squareClassName}
-                  draggable={Boolean(piece && piece === piece.toUpperCase() && turn === "w")}
-                  key={square}
-                  onClick={() => handleSquareClick(square)}
-                  onDragOver={(event) => {
-                    if (selectedSquare) event.preventDefault();
-                  }}
-                  onDragStart={(event) => handleDragStart(event, square)}
-                  onDrop={(event) => handleDrop(event, square)}
-                  role="gridcell"
-                  title={pieceName ? `${square}: ${pieceName}` : square}
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`chessboard-piece ${pieceColorClass}`.trim()}
-                  >
-                    {PIECES[piece] || ""}
-                  </span>
-                  {fileIndex === 0 ? <small className="rank-label" aria-hidden="true">{8 - rowIndex}</small> : null}
-                  {rowIndex === 7 ? <small className="file-label" aria-hidden="true">{FILES[fileIndex]}</small> : null}
-                </button>
-              );
-            })}
+                    return (
+                      <button
+                        aria-colindex={fileIndex + 1}
+                        aria-label={pieceName ? `${square}: ${pieceName}` : square}
+                        aria-rowindex={rowIndex + 1}
+                        aria-selected={isSelected}
+                        className={squareClassName}
+                        data-square={square}
+                        key={square}
+                        onClick={() => handleSquareClick(square)}
+                        onDragOver={(event) => {
+                          if (selectedSquare) event.preventDefault();
+                        }}
+                        onDrop={(event) => handleDrop(event, square)}
+                        onFocus={() => setFocusedSquare(square)}
+                        onKeyDown={(event) => handleSquareKeyDown(event, square)}
+                        ref={(element) => {
+                          if (element) squareRefs.current.set(square, element);
+                          else squareRefs.current.delete(square);
+                        }}
+                        role="gridcell"
+                        tabIndex={focusedSquare === square ? 0 : -1}
+                        title={pieceName ? `${square}: ${pieceName}` : square}
+                        type="button"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`chessboard-piece ${pieceColorClass}`.trim()}
+                          draggable={isDraggable}
+                          onDragEnd={() => setSelectedSquare("")}
+                          onDragStart={(event) => handleDragStart(event, square)}
+                        >
+                          {PIECES[piece] || ""}
+                        </span>
+                        {fileIndex === 0 ? <small className="rank-label" aria-hidden="true">{8 - rowIndex}</small> : null}
+                        {rowIndex === 7 ? <small className="file-label" aria-hidden="true">{FILES[fileIndex]}</small> : null}
+                      </button>
+                    );
+                  })}
+              </div>
+            ))}
           </div>
         </div>
       ) : null}
-    </>,
-    state.host,
+    </section>
   );
 }

@@ -1,11 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./AppV2.jsx";
-import BoardVisibilityToggle from "./BoardVisibilityToggle.jsx";
-import ConfirmMoveButton from "./ConfirmMoveButton.jsx";
-import EvaluationPanel from "./EvaluationPanel.jsx";
-import MovesVisibilityToggle from "./MovesVisibilityToggle.jsx";
-import SettingsPanel from "./SettingsPanel.jsx";
+import App from "./App.jsx";
 import globalStyles from "./styles.css?raw";
 import boardStyles from "./board-visibility.css?raw";
 import evaluationStyles from "./evaluation-panel.css?raw";
@@ -15,6 +10,13 @@ import "./styles.css";
 function installBundledStyleFallback() {
   const styleId = "blindfold-bundled-styles";
   if (document.getElementById(styleId)) return;
+  if (
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--content-width")
+      .trim()
+  ) {
+    return;
+  }
 
   const style = document.createElement("style");
   style.id = styleId;
@@ -32,13 +34,6 @@ installBundledStyleFallback();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <>
-      <App />
-      <ConfirmMoveButton />
-      <MovesVisibilityToggle />
-      <BoardVisibilityToggle />
-      <EvaluationPanel />
-      <SettingsPanel />
-    </>
+    <App />
   </React.StrictMode>
 );

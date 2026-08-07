@@ -35,7 +35,7 @@ function getCyprusBuildStamp() {
 
 const shortCommit = getShortCommit();
 const buildStamp = getCyprusBuildStamp();
-const baseVersionDeclaration = 'const APP_VERSION = "v1.2.1_20260806";';
+const appVersionDeclarationPattern = /const APP_VERSION = "(v\d+\.\d+\.\d+)_\d{8}";/;
 
 export default defineConfig({
   plugins: [
@@ -45,14 +45,16 @@ export default defineConfig({
       enforce: "pre",
       transform(code, id) {
         const normalizedId = id.replaceAll("\\", "/");
-        if (!normalizedId.endsWith("/src/App.jsx") || !code.includes(baseVersionDeclaration)) {
+        const versionMatch = code.match(appVersionDeclarationPattern);
+
+        if (!normalizedId.endsWith("/src/App.jsx") || !versionMatch) {
           return null;
         }
 
         return {
           code: code.replace(
-            baseVersionDeclaration,
-            `const APP_VERSION = "v1.2.1_${buildStamp}_${shortCommit}";`,
+            appVersionDeclarationPattern,
+            `const APP_VERSION = "${versionMatch[1]}_${buildStamp}_${shortCommit}";`,
           ),
           map: null,
         };
