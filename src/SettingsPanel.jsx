@@ -4,10 +4,10 @@ import { getStoredValue, setStoredValue } from "./storage.js";
 import "./settings-panel.css";
 
 const DEFAULT_SETTINGS = Object.freeze({
-  theme: "classic",
-  accent: "brown",
-  textSize: "normal",
-  font: "system",
+  theme: "light",
+  accent: "green",
+  textSize: "large",
+  font: "sans",
 });
 
 const STORAGE_KEYS = Object.freeze({
