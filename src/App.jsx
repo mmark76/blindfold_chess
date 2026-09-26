@@ -3,6 +3,7 @@ import { Chess } from "chess.js";
 import BoardVisibilityToggle from "./BoardVisibilityToggle.jsx";
 import ConfirmMoveButton from "./ConfirmMoveButton.jsx";
 import EvaluationPanel from "./EvaluationPanel.jsx";
+import AnalyticsConsentBanner from "./AnalyticsConsentBanner.jsx";
 import ModalDialog from "./ModalDialog.jsx";
 import MovesVisibilityToggle from "./MovesVisibilityToggle.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
@@ -174,15 +175,15 @@ const LEGAL_CONTENT = {
     en: {
       title: "Analytics choices",
       paragraphs: [
-        "This version does not provide in-app analytics preference controls.",
-        "The hosting provider may still process essential technical logs required to deliver and secure the website.",
+        "Google Analytics is used only after you explicitly allow analytics storage. Advertising features remain disabled.",
+        "You can change your analytics choice at any time from the Analytics choices control in the footer.",
       ],
     },
     el: {
       title: "Επιλογές αναλυτικών στοιχείων",
       paragraphs: [
-        "Αυτή η έκδοση δεν παρέχει ρυθμίσεις αναλυτικών στοιχείων μέσα στην εφαρμογή.",
-        "Ο πάροχος φιλοξενίας μπορεί να επεξεργάζεται απαραίτητα τεχνικά αρχεία για την παράδοση και την ασφάλεια του ιστοτόπου.",
+        "Το Google Analytics χρησιμοποιείται μόνο αφού επιτρέψεις ρητά την αποθήκευση analytics. Οι διαφημιστικές λειτουργίες παραμένουν απενεργοποιημένες.",
+        "Μπορείς να αλλάξεις την επιλογή σου οποιαδήποτε στιγμή από το κουμπί Επιλογές αναλυτικών στοιχείων στο footer.",
       ],
     },
   },
@@ -264,6 +265,7 @@ export default function App() {
   ));
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAnalyticsChoices, setShowAnalyticsChoices] = useState(false);
 
   const copy = COPY[language] || COPY.en;
   const speechSupported = Boolean(SpeechRecognition);
@@ -782,7 +784,15 @@ export default function App() {
   function openLegalSection(section) {
     setShowHowToPlay(false);
     setShowSettings(false);
+    setShowAnalyticsChoices(false);
     setLegalSection(section);
+  }
+
+  function openAnalyticsChoices() {
+    setShowHowToPlay(false);
+    setShowSettings(false);
+    setLegalSection(null);
+    setShowAnalyticsChoices(true);
   }
 
   function openEvaluationPanel() {
@@ -989,7 +999,7 @@ export default function App() {
         <nav className="footer-meta" aria-label={copy.legalInfo}>
           <button onClick={() => openLegalSection("license")} type="button">{copy.license}</button>
           <button onClick={() => openLegalSection("privacy")} type="button">{copy.privacy}</button>
-          <button onClick={() => openLegalSection("analytics")} type="button">{copy.analytics}</button>
+          <button onClick={openAnalyticsChoices} type="button">{copy.analytics}</button>
           <button onClick={() => openLegalSection("copyright")} type="button">{copy.copyright}</button>
         </nav>
         <small className="build-version">{APP_VERSION}</small>
@@ -1034,6 +1044,12 @@ export default function App() {
             </div>
         </ModalDialog>
       ) : null}
+
+      <AnalyticsConsentBanner
+        forceOpen={showAnalyticsChoices}
+        language={language}
+        onClose={() => setShowAnalyticsChoices(false)}
+      />
 
       <SettingsPanel
         isOpen={showSettings}
