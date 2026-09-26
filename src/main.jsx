@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./voice/speechRecognitionBridge.js";
 import App from "./App.jsx";
+import { initializeAnalytics } from "./analytics.js";
 import globalStyles from "./styles.css?raw";
 import boardStyles from "./board-visibility.css?raw";
 import evaluationStyles from "./evaluation-panel.css?raw";
@@ -32,6 +33,7 @@ function installBundledStyleFallback() {
 }
 
 installBundledStyleFallback();
+initializeAnalytics();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
