@@ -1,23 +1,15 @@
-import React, { useEffect, useState } from "react";
-import {
-  getAnalyticsConsent,
-  setAnalyticsConsent,
-} from "./analytics.js";
+import React from "react";
 
 const COPY = {
   en: {
-    title: "Analytics choices",
-    text: "Google Analytics helps measure visits and page use. Analytics storage stays disabled unless you allow it. Advertising features remain disabled.",
-    necessary: "Necessary only",
-    allow: "Allow analytics",
-    close: "Close analytics choices",
+    title: "Cookie-less analytics",
+    text: "No analytics cookies are used. Only aggregate visit counts by UTC hour, domain, and country are recorded solely so the administrator can understand overall traffic. No identifiers, page paths, referrers, device data, or in-app actions are collected.",
+    close: "Close analytics information",
   },
   el: {
-    title: "Επιλογές αναλυτικών στοιχείων",
-    text: "Το Google Analytics βοηθά στη μέτρηση επισκέψεων και χρήσης των σελίδων. Η αποθήκευση analytics παραμένει απενεργοποιημένη εκτός αν την επιτρέψεις. Οι διαφημιστικές λειτουργίες παραμένουν απενεργοποιημένες.",
-    necessary: "Μόνο απαραίτητα",
-    allow: "Επιτρέπω analytics",
-    close: "Κλείσιμο επιλογών analytics",
+    title: "Analytics χωρίς cookies",
+    text: "Δεν χρησιμοποιούνται cookies analytics. Καταγράφονται μόνο συγκεντρωτικοί αριθμοί επισκέψεων ανά ώρα UTC, domain και χώρα, αποκλειστικά για να κατανοεί ο διαχειριστής τη συνολική επισκεψιμότητα. Δεν συλλέγονται αναγνωριστικά, διαδρομές σελίδων, referrers, δεδομένα συσκευής ή ενέργειες μέσα στην εφαρμογή.",
+    close: "Κλείσιμο πληροφοριών analytics",
   },
 };
 
@@ -26,22 +18,9 @@ export default function AnalyticsConsentBanner({
   language = "en",
   onClose,
 }) {
-  const [consent, setConsent] = useState(() => getAnalyticsConsent());
-
-  useEffect(() => {
-    if (forceOpen) setConsent(getAnalyticsConsent());
-  }, [forceOpen]);
+  if (!forceOpen) return null;
 
   const copy = COPY[language] || COPY.en;
-  const visible = forceOpen || consent === null;
-
-  function choose(nextConsent) {
-    setAnalyticsConsent(nextConsent);
-    setConsent(nextConsent);
-    onClose?.();
-  }
-
-  if (!visible) return null;
 
   return (
     <aside
@@ -55,27 +34,15 @@ export default function AnalyticsConsentBanner({
       </div>
 
       <div className="analytics-consent-actions">
-        <button onClick={() => choose("denied")} type="button">
-          {copy.necessary}
-        </button>
         <button
-          className="analytics-consent-allow"
-          onClick={() => choose("granted")}
+          aria-label={copy.close}
+          className="analytics-consent-close"
+          onClick={() => onClose?.()}
+          title={copy.close}
           type="button"
         >
-          {copy.allow}
+          ×
         </button>
-        {consent !== null ? (
-          <button
-            aria-label={copy.close}
-            className="analytics-consent-close"
-            onClick={() => onClose?.()}
-            title={copy.close}
-            type="button"
-          >
-            ×
-          </button>
-        ) : null}
       </div>
     </aside>
   );

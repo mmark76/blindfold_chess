@@ -73,7 +73,7 @@ const COPY = {
     rights: "All rights reserved.",
     license: "License",
     privacy: "Privacy",
-    analytics: "Analytics choices",
+    analytics: "Analytics information",
     copyright: "Copyright protected",
     close: "Close",
     legalInfo: "Legal information",
@@ -128,7 +128,7 @@ const COPY = {
     rights: "Με επιφύλαξη παντός δικαιώματος.",
     license: "Άδεια",
     privacy: "Απόρρητο",
-    analytics: "Επιλογές αναλυτικών στοιχείων",
+    analytics: "Πληροφορίες analytics",
     copyright: "Πνευματικά δικαιώματα",
     close: "Κλείσιμο",
     legalInfo: "Νομικές πληροφορίες",
@@ -173,17 +173,17 @@ const LEGAL_CONTENT = {
   },
   analytics: {
     en: {
-      title: "Analytics choices",
+      title: "Cookie-less analytics",
       paragraphs: [
-        "Google Analytics is used only after you explicitly allow analytics storage. Advertising features remain disabled.",
-        "You can change your analytics choice at any time from the Analytics choices control in the footer.",
+        "No analytics cookies are used. Only aggregate visit counts by UTC hour, domain, and country are recorded solely so the administrator can understand overall traffic.",
+        "No identifiers, page paths, referrers, device data, or in-app actions are collected. You can review this information at any time from the footer.",
       ],
     },
     el: {
-      title: "Επιλογές αναλυτικών στοιχείων",
+      title: "Analytics χωρίς cookies",
       paragraphs: [
-        "Το Google Analytics χρησιμοποιείται μόνο αφού επιτρέψεις ρητά την αποθήκευση analytics. Οι διαφημιστικές λειτουργίες παραμένουν απενεργοποιημένες.",
-        "Μπορείς να αλλάξεις την επιλογή σου οποιαδήποτε στιγμή από το κουμπί Επιλογές αναλυτικών στοιχείων στο footer.",
+        "Δεν χρησιμοποιούνται cookies analytics. Καταγράφονται μόνο συγκεντρωτικοί αριθμοί επισκέψεων ανά ώρα UTC, domain και χώρα, αποκλειστικά για να κατανοεί ο διαχειριστής τη συνολική επισκεψιμότητα.",
+        "Δεν συλλέγονται αναγνωριστικά, διαδρομές σελίδων, referrers, δεδομένα συσκευής ή ενέργειες μέσα στην εφαρμογή. Μπορείς να δεις τις πληροφορίες οποιαδήποτε στιγμή από το footer.",
       ],
     },
   },
