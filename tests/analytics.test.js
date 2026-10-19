@@ -1,59 +1,77 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  ANALYTICS_CONSENT_KEY,
-  GA4_MEASUREMENT_ID,
-  getAnalyticsConsent,
-  setAnalyticsConsent,
-} from "../src/analytics.js";
+import { initializeAnalytics } from "../src/analytics.js";
 
-class MemoryStorage {
+class FakeDocument {
   constructor() {
-    this.values = new Map();
+    this.elements = new Map();
+    this.head = {
+      appendChild: (element) => {
+        this.elements.set(element.id, element);
+      },
+    };
   }
 
-  getItem(key) {
-    return this.values.has(key) ? this.values.get(key) : null;
+  createElement() {
+    return {};
   }
 
-  setItem(key, value) {
-    this.values.set(key, String(value));
+  getElementById(id) {
+    return this.elements.get(id) || null;
   }
 }
 
-test("analytics consent defaults to unset and persists valid choices", () => {
-  const previousStorage = globalThis.localStorage;
-  const previousDataLayer = globalThis.dataLayer;
-  const previousGtag = globalThis.gtag;
+function withBrowserEnvironment(location, callback) {
+  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const locationDescriptor = Object.getOwnPropertyDescriptor(globalThis, "location");
+  const documentRef = new FakeDocument();
 
-  globalThis.localStorage = new MemoryStorage();
-  globalThis.dataLayer = [];
-  delete globalThis.gtag;
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: documentRef,
+  });
+  Object.defineProperty(globalThis, "location", {
+    configurable: true,
+    value: location,
+  });
 
   try {
-    assert.equal(GA4_MEASUREMENT_ID, "G-DK5WN8TH3Z");
-    assert.equal(getAnalyticsConsent(), null);
-
-    assert.equal(setAnalyticsConsent("granted"), true);
-    assert.equal(
-      globalThis.localStorage.getItem(ANALYTICS_CONSENT_KEY),
-      "granted",
-    );
-    assert.equal(getAnalyticsConsent(), "granted");
-
-    assert.equal(setAnalyticsConsent("denied"), true);
-    assert.equal(getAnalyticsConsent(), "denied");
-
-    assert.equal(setAnalyticsConsent("invalid"), false);
-    assert.equal(getAnalyticsConsent(), "denied");
+    callback(documentRef);
   } finally {
-    if (previousStorage === undefined) delete globalThis.localStorage;
-    else globalThis.localStorage = previousStorage;
+    if (documentDescriptor) Object.defineProperty(globalThis, "document", documentDescriptor);
+    else delete globalThis.document;
 
-    if (previousDataLayer === undefined) delete globalThis.dataLayer;
-    else globalThis.dataLayer = previousDataLayer;
-
-    if (previousGtag === undefined) delete globalThis.gtag;
-    else globalThis.gtag = previousGtag;
+    if (locationDescriptor) Object.defineProperty(globalThis, "location", locationDescriptor);
+    else delete globalThis.location;
   }
+}
+
+test("cookie-less analytics loads once on the production hostname", () => {
+  withBrowserEnvironment(
+    {
+      hostname: "blindfoldchess.markellosecosystem.com",
+      protocol: "https:",
+    },
+    (documentRef) => {
+      assert.equal(initializeAnalytics(), true);
+
+      const script = documentRef.getElementById("blindfold-cookieless-analytics");
+      assert.equal(script.async, true);
+      assert.equal(script.src, "https://analytics.markellosecosystem.com/v1/script.js");
+      assert.equal(initializeAnalytics(), false);
+    },
+  );
+});
+
+test("cookie-less analytics does not load outside the production hostname", () => {
+  withBrowserEnvironment(
+    {
+      hostname: "localhost",
+      protocol: "https:",
+    },
+    (documentRef) => {
+      assert.equal(initializeAnalytics(), false);
+      assert.equal(documentRef.elements.size, 0);
+    },
+  );
 });

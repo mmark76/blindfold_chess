@@ -1,72 +1,27 @@
-import { getStoredEnum, setStoredValue } from "./storage.js";
-
-export const GA4_MEASUREMENT_ID = "G-DK5WN8TH3Z";
-export const ANALYTICS_CONSENT_KEY = "blindfold-analytics-consent-v1";
-
-const GOOGLE_TAG_SCRIPT_ID = "blindfold-google-tag";
-const DENIED_CONSENT = Object.freeze({
-  ad_storage: "denied",
-  ad_user_data: "denied",
-  ad_personalization: "denied",
-  analytics_storage: "denied",
-});
-
-let configured = false;
-
-function getGtag() {
-  globalThis.dataLayer = globalThis.dataLayer || [];
-
-  if (typeof globalThis.gtag !== "function") {
-    globalThis.gtag = function gtag() {
-      globalThis.dataLayer.push(arguments);
-    };
-  }
-
-  return globalThis.gtag;
-}
-
-export function getAnalyticsConsent() {
-  return getStoredEnum(
-    ANALYTICS_CONSENT_KEY,
-    ["granted", "denied"],
-    null,
-  );
-}
-
-function applyConsent(consent) {
-  getGtag()("consent", "update", {
-    ...DENIED_CONSENT,
-    analytics_storage: consent === "granted" ? "granted" : "denied",
-  });
-}
-
-export function setAnalyticsConsent(consent) {
-  if (!["granted", "denied"].includes(consent)) return false;
-  const stored = setStoredValue(ANALYTICS_CONSENT_KEY, consent);
-  applyConsent(consent);
-  return stored;
-}
+const ANALYTICS_SCRIPT_ID = "blindfold-cookieless-analytics";
+const ANALYTICS_SCRIPT_URL = "https://analytics.markellosecosystem.com/v1/script.js";
+const PRODUCTION_HOSTS = new Set([
+  "blindfoldchess.markellosecosystem.com",
+]);
 
 export function initializeAnalytics() {
-  const gtag = getGtag();
-  gtag("consent", "default", DENIED_CONSENT);
-  applyConsent(getAnalyticsConsent());
-
   const documentRef = globalThis.document;
-  if (documentRef && !documentRef.getElementById(GOOGLE_TAG_SCRIPT_ID)) {
-    const script = documentRef.createElement("script");
-    script.id = GOOGLE_TAG_SCRIPT_ID;
-    script.async = true;
-    script.src = `https://www.googletagmanager.com/gtag/js?id=${GA4_MEASUREMENT_ID}`;
-    documentRef.head.appendChild(script);
+  const locationRef = globalThis.location;
+
+  if (
+    !documentRef
+    || !locationRef
+    || locationRef.protocol !== "https:"
+    || !PRODUCTION_HOSTS.has(locationRef.hostname.toLowerCase())
+    || documentRef.getElementById(ANALYTICS_SCRIPT_ID)
+  ) {
+    return false;
   }
 
-  if (configured) return;
-
-  gtag("js", new Date());
-  gtag("config", GA4_MEASUREMENT_ID, {
-    allow_google_signals: false,
-    allow_ad_personalization_signals: false,
-  });
-  configured = true;
+  const script = documentRef.createElement("script");
+  script.id = ANALYTICS_SCRIPT_ID;
+  script.async = true;
+  script.src = ANALYTICS_SCRIPT_URL;
+  documentRef.head.appendChild(script);
+  return true;
 }
