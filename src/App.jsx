@@ -4,6 +4,10 @@ import BoardVisibilityToggle from "./BoardVisibilityToggle.jsx";
 import ConfirmMoveButton from "./ConfirmMoveButton.jsx";
 import EvaluationPanel from "./EvaluationPanel.jsx";
 import AnalyticsConsentBanner from "./AnalyticsConsentBanner.jsx";
+import {
+  dismissAnalyticsNotice,
+  shouldShowAnalyticsNotice,
+} from "./analytics-notice.js";
 import ModalDialog from "./ModalDialog.jsx";
 import MovesVisibilityToggle from "./MovesVisibilityToggle.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
@@ -265,7 +269,9 @@ export default function App() {
   ));
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showAnalyticsChoices, setShowAnalyticsChoices] = useState(false);
+  const [showAnalyticsChoices, setShowAnalyticsChoices] = useState(() => (
+    shouldShowAnalyticsNotice()
+  ));
 
   const copy = COPY[language] || COPY.en;
   const speechSupported = Boolean(SpeechRecognition);
@@ -795,6 +801,11 @@ export default function App() {
     setShowAnalyticsChoices(true);
   }
 
+  function closeAnalyticsChoices() {
+    dismissAnalyticsNotice();
+    setShowAnalyticsChoices(false);
+  }
+
   function openEvaluationPanel() {
     setShowEvaluation(true);
     window.requestAnimationFrame(() => {
@@ -1048,7 +1059,7 @@ export default function App() {
       <AnalyticsConsentBanner
         forceOpen={showAnalyticsChoices}
         language={language}
-        onClose={() => setShowAnalyticsChoices(false)}
+        onClose={closeAnalyticsChoices}
       />
 
       <SettingsPanel
